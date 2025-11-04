@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QUẢN LÍ CHI TIÊU CHO HỌC SINH - Quản lý Chi tiêu</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+
+        <section id="auth-screen" class="screen active">
+            <div class="auth-box">
+                <h1 class="logo"><i class="fas fa-wallet"></i> QUẢN LÍ CHI TIÊU CHO HỌC SINH</h1>
+                <h3>Chào mừng trở lại!</h3>
+                <p id="auth-error" class="error-message"></p>
+
+                <form id="login-form">
+                    <input type="text" id="login-username" placeholder="Tên đăng nhập" required>
+                    <input type="password" id="login-password" placeholder="Mật khẩu" required>
+                    <button type="submit" class="btn primary-btn full-width">Đăng Nhập</button>
+                    <p class="switch-link" id="show-register">Chưa có tài khoản? Đăng ký ngay</p>
+                </form>
+
+                <form id="register-form" style="display: none;">
+                    <input type="text" id="register-username" placeholder="Tên đăng nhập" required>
+                    <input type="password" id="register-password" placeholder="Mật khẩu" required>
+                    <input type="password" id="register-confirm-password" placeholder="Xác nhận mật khẩu" required>
+                    <button type="submit" class="btn primary-btn full-width">Đăng Ký</button>
+                    <p class="switch-link" id="show-login">Đã có tài khoản? Đăng nhập</p>
+                </form>
+            </div>
+        </section>
+
+        <section id="profile-setup-screen" class="screen">
+            <div class="auth-box">
+                <h1 class="logo"><i class="fas fa-user-cog"></i> Thiết Lập Hồ Sơ</h1>
+                <h3>Thông tin ban đầu</h3>
+                <form id="profile-form">
+                    <label for="initial-balance">Số dư ban đầu (VNĐ)</label>
+                    <input type="number" id="initial-balance" value="0" min="0" required>
+                    
+                    <label for="monthly-income">Thu nhập hàng tháng (VNĐ) - Dùng cho tỷ lệ chi tiêu</label>
+                    <input type="number" id="monthly-income" value="10000000" min="0" required>
+
+                    <label for="daily-limit">Giới hạn Chi tiêu Hàng ngày (VNĐ) - Đặt 0 nếu không giới hạn</label>
+                    <input type="number" id="daily-limit" value="100000" min="0" required>
+
+                    <button type="submit" class="btn success-btn full-width mt-4">Hoàn Tất Thiết Lập</button>
+                </form>
+            </div>
+        </section>
+
+        <section id="main-app" class="screen">
+            <div class="sidebar">
+                <div class="logo"><i class="fas fa-graduation-cap"></i> QLCTHS</div>
+                <div class="nav-menu">
+                    <button class="nav-item active" data-target="dashboard-tab">
+                        <i class="fas fa-home"></i> Trang chủ
+                    </button>
+                    <button class="nav-item" data-target="transaction-tab">
+                        <i class="fas fa-plus-circle"></i> Thêm giao dịch
+                    </button>
+                    <button class="nav-item" data-target="savings-tab">
+                        <i class="fas fa-piggy-bank"></i> Tiết kiệm
+                    </button>
+                    <button class="nav-item" data-target="history-tab">
+                        <i class="fas fa-history"></i> Lịch sử
+                    </button>
+                    <button class="nav-item" data-target="settings-tab">
+                        <i class="fas fa-cog"></i> Cài đặt
+                    </button>
+                </div>
+                <div>
+                    <button class="btn logout-btn full-width" id="logout-btn-app">
+                        <i class="fas fa-sign-out-alt"></i> Thoát
+                    </button>
+                </div>
+            </div>
+
+            <div class="content-area">
+                <div class="top-header">
+                    <h1 id="tab-title">Trang chủ</h1>
+                    <div class="header-info">Xin chào, <span id="current-user-display">Guest</span></div>
+                </div>
+
+                <div id="dashboard-tab" class="tab-content active">
+                    <h2>Tổng quan</h2>
+                    <div class="summary-cards">
+                        <div class="card balance-card">
+                            <h3>Số Dư Hiện Có</h3>
+                            <p id="current-balance" class="amount">0 đ</p>
+                        </div>
+                        <div class="card expense-card">
+                            <h3>Chi Tiêu Hôm Nay</h3>
+                            <p id="daily-spent" class="amount negative">0 đ</p>
+                        </div>
+                        <div class="card limit-card">
+                            <h3>Giới Hạn Ngày</h3>
+                            <p id="daily-limit-display" class="amount">0 đ</p>
+                        </div>
+                        <div class="card expense-card">
+                            <h3>Tổng Chi Tiêu Tháng</h3>
+                            <p id="monthly-expense" class="amount negative">0 đ</p>
+                        </div>
+                        <div class="card">
+                            <h3>Tỷ Lệ Chi Tiêu/Thu Nhập</h3>
+                            <p id="expense-ratio" class="amount">0%</p>
+                        </div>
+                        <div class="card">
+                            <h3>Thao tác nhanh</h3>
+                            <button class="btn success-btn full-width" data-modal="income-modal">
+                                <i class="fas fa-plus"></i> Thêm Thu Nhập
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="daily-limit-alert" class="message error-message" style="display:none; position: static;">
+                        <i class="fas fa-exclamation-triangle"></i> **CẢNH BÁO:** Bạn đã vượt quá giới hạn chi tiêu hàng ngày!
+                    </div>
+                    
+                    <div class="chart-section">
+                        <h2>Phân bổ chi tiêu & Lịch sử</h2>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                            <div class="chart-box"><canvas id="monthlyPieChart"></canvas></div>
+                            <div class="chart-box"><canvas id="historyBarChart"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="transaction-tab" class="tab-content">
+                    <h2>Thêm Giao Dịch Mới</h2>
+                    <form id="transaction-form" class="card">
+                        <div class="form-grid">
+                            <div>
+                                <label for="type-select">Loại giao dịch</label>
+                                <select id="type-select" required>
+                                    <option value="expense">Chi tiêu</option>
+                                    <option value="income">Thu nhập</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="amount-input">Số tiền (VNĐ)</label>
+                                <input type="number" id="amount-input" min="1" required>
+                            </div>
+                            <div>
+                                <label for="category-select">Danh mục</label>
+                                <select id="category-select" required>
+                                    <option value="an-uong">Ăn Uống</option>
+                                    <option value="di-lai">Đi Lại</option>
+                                    <option value="sinh-hoat">Sinh Hoạt</option>
+                                    <option value="giai-tri">Giải Trí</option>
+                                    <option value="hoc-tap">Học Tập</option>
+                                    <option value="khac">Khác (Chi)</option>
+                                    <option value="thu-nhap-chinh">Thu Nhập Chính</option>
+                                    <option value="thu-nhap-phu">Thu Nhập Phụ</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="date-input">Ngày</label>
+                                <input type="date" id="date-input" required>
+                            </div>
+                            <div class="full-width">
+                                <label for="note-input">Ghi chú (Tùy chọn)</label>
+                                <input type="text" id="note-input" maxlength="100">
+                            </div>
+                            <div class="full-width">
+                                <button type="submit" class="btn primary-btn full-width mt-3" id="add-transaction-btn">
+                                    <i class="fas fa-save"></i> Lưu Giao Dịch
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <div id="savings-tab" class="tab-content">
+                    <h2><i class="fas fa-piggy-bank"></i> Quỹ Tiết Kiệm</h2>
+                    <div class="savings-info-box card">
+                        <h3>Mục Tiêu Hiện Tại: <span id="savings-goal-name">Chưa thiết lập</span></h3>
+                        <p>Cần đạt: <span id="target-savings-amount">0 đ</span></p>
+                        <p>Đã tích lũy: <span id="current-savings-amount">0 đ</span></p>
+                        <div class="progress-bar-container">
+                            <div id="savings-progress-bar" class="progress-bar">0%</div>
+                        </div>
+                    </div>
+
+                    <div class="settings-group">
+                        <h3>Thiết Lập Mục Tiêu</h3>
+                        <form id="savings-form" class="form-grid">
+                            <div class="full-width">
+                                <label for="savings-name">Tên Mục Tiêu (Ví dụ: Mua laptop)</label>
+                                <input type="text" id="savings-name" required>
+                            </div>
+                            <div>
+                                <label for="savings-goal-input">Mục tiêu (VNĐ)</label>
+                                <input type="number" id="savings-goal-input" min="1000" required>
+                            </div>
+                            <div>
+                                <label for="savings-password">Mật khẩu Quỹ (Để bảo vệ tiền rút)</label>
+                                <input type="password" id="savings-password" required>
+                            </div>
+                            <div class="full-width">
+                                <button type="submit" class="btn primary-btn full-width mt-3">Lưu Mục Tiêu</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="settings-group">
+                        <h3>Chuyển Tiền Vào Quỹ</h3>
+                        <form id="savings-transfer-form" class="form-grid">
+                            <div>
+                                <label for="transfer-amount">Số tiền muốn chuyển (VNĐ)</label>
+                                <input type="number" id="transfer-amount" min="1000" required>
+                            </div>
+                            <div>
+                                <label for="transfer-password">Nhập Mật khẩu Quỹ</label>
+                                <input type="password" id="transfer-password" required>
+                            </div>
+                            <div class="full-width">
+                                <button type="submit" class="btn success-btn full-width mt-3">Chuyển Vào Quỹ</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="settings-group mt-5">
+                        <h3><i class="fas fa-archive"></i> Lịch Sử Mục Tiêu Hoàn Thành</h3>
+                        <ul id="savings-history-list" class="transaction-list">
+                            </ul>
+                    </div>
+
+                </div>
+
+                <div id="history-tab" class="tab-content">
+                    <h2><i class="fas fa-history"></i> Lịch Sử Giao Dịch</h2>
+                    <div class="filter-controls">
+                        <select id="history-filter-type">
+                            <option value="all">Tất cả</option>
+                            <option value="expense">Chi tiêu</option>
+                            <option value="income">Thu nhập</option>
+                        </select>
+                        <input type="month" id="history-filter-month">
+                        <button id="filter-history-btn" class="btn small-btn primary-btn">Lọc</button>
+                    </div>
+                    
+                    <div class="transaction-list-container">
+                        <ul id="transaction-list" class="transaction-list">
+                            </ul>
+                    </div>
+                </div>
+
+                <div id="settings-tab" class="tab-content">
+                    <h2><i class="fas fa-cog"></i> Cài Đặt Chung</h2>
+                    
+                    <div class="settings-group">
+                        <h3>Cập Nhật Cài Đặt Profile</h3>
+                        <form id="update-profile-form" class="form-grid">
+                            <div>
+                                <label for="set-monthly-income">Thu nhập hàng tháng (VNĐ)</label>
+                                <input type="number" id="set-monthly-income" min="0" required>
+                            </div>
+                            <div>
+                                <label for="set-daily-limit">Giới hạn Chi tiêu Hàng ngày (VNĐ)</label>
+                                <input type="number" id="set-daily-limit" min="0" required>
+                            </div>
+                            <div class="full-width">
+                                <button type="submit" class="btn primary-btn mt-3">Lưu Cài Đặt</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="settings-group">
+                        <h3>Quản lý Dữ liệu</h3>
+                        <button id="reset-data-btn" class="btn danger-btn">
+                            <i class="fas fa-exclamation-triangle"></i> Xóa Toàn Bộ Dữ Liệu
+                        </button>
+                        <p class="small-text mt-3">Cảnh báo: Hành động này sẽ xóa hết tất cả tài khoản và giao dịch trên trình duyệt này.</p>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+        
+        <div id="limit-override-modal" class="modal">
+            <div class="modal-content">
+                <span class="close-btn" data-modal-close="limit-override-modal">&times;</span>
+                <h3>CẢNH BÁO: Vượt Giới Hạn Chi Tiêu Ngày!</h3>
+                <p>Bạn đang cố gắng chi tiêu vượt mức giới hạn ngày. Vui lòng xác nhận để tiếp tục.</p>
+                <form id="limit-override-form">
+                    <label for="override-password">Nhập Mật khẩu Xác nhận</label>
+                    <input type="password" id="override-password" required>
+                    
+                    <label for="override-reason">Lý do Chi tiêu Vượt mức</label>
+                    <input type="text" id="override-reason" placeholder="Ví dụ: Mua thuốc khẩn cấp" required>
+
+                    <button type="submit" class="btn danger-btn full-width mt-3">Xác Nhận & Lưu Giao Dịch</button>
+                    <button type="button" class="btn full-width mt-2" data-modal-cancel="limit-override-modal">Hủy</button>
+                </form>
+            </div>
+        </div>
+
+        <div id="global-message" class="message"></div>
+
+        <div id="income-modal" class="modal">
+            <div class="modal-content">
+                <span class="close-btn">&times;</span>
+                <h3>Thêm Thu Nhập Nhanh</h3>
+                <form id="quick-income-form">
+                    <label for="quick-amount">Số tiền (VNĐ)</label>
+                    <input type="number" id="quick-amount" min="1" required>
+                    <label for="quick-date">Ngày</label>
+                    <input type="date" id="quick-date" required>
+                    <button type="submit" class="btn success-btn full-width mt-3">Thêm</button>
+                </form>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
