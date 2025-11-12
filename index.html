@@ -1,9 +1,10 @@
-<!DOCTYPE html>
+github<!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sổ Tay Chi Tiêu Cá Nhân</title>
+    <title>QUẢN LÝ CHI TIÊU THPT</title>
+    <meta name="theme-color" content="#1a73e8"> 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
     <link rel="stylesheet" href="style.css">
@@ -12,263 +13,399 @@
 
     <div id="global-message" class="message"></div>
 
-    <div id="auth-screen" class="screen active">
-        <header class="header">
-            <h1>Finance Flow</h1>
+    <div id="auth-screen" class="screen-container active">
+        <header class="auth-header">
+            <h1>QLCT THPT</h1>
+            <p>Quản lý Chi tiêu Cá nhân Trung học Phổ thông</p>
         </header>
-        <main class="content auth-content">
-            <div id="login-form" class="auth-form active">
-                <h2>Đăng Nhập</h2>
-                <p id="auth-error" class="error-message"></p>
-                <form>
-                    <input type="text" id="login-username" placeholder="Tên đăng nhập" required>
-                    <input type="password" id="login-password" placeholder="Mật khẩu" required>
-                    <button type="submit" class="btn primary">Đăng Nhập</button>
-                </form>
-                <p>Chưa có tài khoản? <span id="show-register" class="link-text">Đăng ký ngay</span></p>
-            </div>
 
-            <div id="register-form" class="auth-form">
-                <h2>Đăng Ký Tài Khoản</h2>
-                <p id="auth-error-reg" class="error-message"></p>
-                <form>
-                    <input type="text" id="register-username" placeholder="Tên đăng nhập" required>
-                    <input type="password" id="register-password" placeholder="Mật khẩu (ít nhất 6 ký tự)" required>
-                    <input type="password" id="register-confirm-password" placeholder="Xác nhận mật khẩu" required>
-                    <button type="submit" class="btn primary">Đăng Ký & Thiết Lập Profile</button>
-                </form>
-                <p>Đã có tài khoản? <span id="show-login" class="link-text">Đăng nhập</span></p>
-            </div>
-        </main>
-    </div>
-
-    <div id="profile-setup-screen" class="screen">
-        <header class="header">
-            <h2>Thiết Lập Hồ Sơ Chi Tiêu</h2>
-        </header>
-        <main class="content">
-            <p>Vui lòng cung cấp một số thông tin ban đầu để bắt đầu quản lý chi tiêu.</p>
-            <form id="profile-form" class="form-container">
-                <label for="initial-balance">Số dư Khởi tạo (VNĐ):</label>
-                <input type="number" id="initial-balance" value="0" min="0" required>
-                
-                <label for="monthly-income">Thu nhập Hàng tháng (VNĐ):</label>
-                <input type="number" id="monthly-income" value="5000000" min="0" required>
-                
-                <label for="daily-limit">Giới hạn Chi tiêu Ngày (VNĐ, tùy chọn):</label>
-                <input type="number" id="daily-limit" value="0" min="0">
-                
-                <button type="submit" class="btn primary">Hoàn Tất</button>
+        <div class="auth-box">
+            <h2 id="auth-title">Đăng Nhập</h2>
+            
+            <form id="login-form" class="auth-form">
+                <div class="input-group">
+                    <label for="login-username">Tên đăng nhập</label>
+                    <input type="text" id="login-username" required>
+                </div>
+                <div class="input-group">
+                    <label for="login-password">Mật khẩu</label>
+                    <input type="password" id="login-password" required>
+                </div>
+                <p id="auth-error" class="error-text"></p>
+                <button type="submit" class="btn primary-btn">Đăng Nhập</button>
             </form>
-        </main>
+
+            <form id="register-form" class="auth-form" style="display: none;">
+                <div class="input-group">
+                    <label for="register-username">Tên đăng nhập mới</label>
+                    <input type="text" id="register-username" required>
+                </div>
+                <div class="input-group">
+                    <label for="register-password">Mật khẩu (ít nhất 6 ký tự)</label>
+                    <input type="password" id="register-password" required>
+                </div>
+                <div class="input-group">
+                    <label for="register-confirm-password">Xác nhận mật khẩu</label>
+                    <input type="password" id="register-confirm-password" required>
+                </div>
+                <p id="auth-error-reg" class="error-text"></p>
+                <button type="submit" class="btn primary-btn">Đăng Ký & Bắt Đầu</button>
+            </form>
+
+            <div class="switch-auth">
+                <p>
+                    Bạn chưa có tài khoản? 
+                    <span id="show-register" class="link-btn">Đăng Ký</span>
+                </p>
+                <p>
+                    Bạn đã có tài khoản? 
+                    <span id="show-login" class="link-btn">Đăng Nhập</span>
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <div id="profile-setup-screen" class="screen-container" style="display: none;">
+        <header class="auth-header">
+            <h2>Thiết Lập Hồ Sơ Chi Tiêu</h2>
+            <p>Hãy cung cấp thông tin ban đầu để bắt đầu quản lý.</p>
+        </header>
+        <form id="profile-form" class="auth-form">
+            <div class="input-group">
+                <label for="initial-balance">Số dư khởi tạo (VNĐ)</label>
+                <input type="number" id="initial-balance" value="0" min="0" required>
+            </div>
+            <div class="input-group">
+                <label for="monthly-income">Thu nhập dự kiến hàng tháng (VNĐ)</label>
+                <input type="number" id="monthly-income" value="0" min="0" required>
+            </div>
+            <div class="input-group">
+                <label for="daily-limit">Giới hạn Chi tiêu Ngày (VNĐ) - 0 nếu không giới hạn</label>
+                <input type="number" id="daily-limit" value="0" min="0" required>
+            </div>
+            <button type="submit" class="btn primary-btn">Hoàn Tất Thiết Lập</button>
+        </form>
     </div>
 
-    <div id="main-app" class="screen">
+    <div id="main-app" class="screen-container">
         <header class="app-header">
+            <h1 id="tab-title">Trang Chủ</h1>
             <div class="user-info">
-                <i class="fas fa-user-circle"></i>
-                <span id="current-user-display">Người dùng</span>
+                <span id="current-user-display"></span>
+                <button id="logout-btn-app" class="btn icon-btn"><i class="fas fa-sign-out-alt"></i></button>
             </div>
-            <h2 id="tab-title">Bảng Điều Khiển</h2>
-            <button id="logout-btn-app" class="btn-icon"><i class="fas fa-sign-out-alt"></i></button>
         </header>
 
-        <main class="content-wrapper">
-            <div id="dashboard-tab" class="tab-content active">
-                <section class="card balance-card">
-                    <p class="card-title">Số dư Ngân sách Tháng</p>
-                    <h3 id="current-balance-display" class="balance-amount">0 VNĐ</h3>
-                    <div class="balance-details">
-                        <div class="detail-item">
-                            <p>Thu nhập Hàng tháng:</p>
-                            <span id="monthly-income-display">0 VNĐ</span>
-                        </div>
-                        <div class="detail-item">
-                            <p>Chi tiêu Hôm nay:</p>
-                            <span id="daily-spent">0 VNĐ</span>
-                        </div>
-                    </div>
-                    <p id="daily-limit-alert" class="alert-message"></p>
-                    <div id="add-balance-container" style="display: none;">
-                        <p class="alert-message error-message">Số dư thực tế đang thấp hơn 0 VNĐ. Hãy nạp thêm tiền!</p>
-                        <button id="show-add-balance-form-btn" class="btn secondary full-width">Thêm Thu Nhập</button>
-                    </div>
-                </section>
-
-                <section class="card chart-card">
-                    <h4>Phân bổ Chi tiêu Tháng</h4>
-                    <div class="chart-container">
-                        <canvas id="monthlyPieChart"></canvas>
-                    </div>
-                </section>
-
-                <section class="card chart-card">
-                    <h4>Chi tiêu 5 ngày gần nhất</h4>
-                    <div class="chart-container">
-                        <canvas id="historyBarChart"></canvas>
-                    </div>
-                </section>
-            </div>
-
-            <div id="history-tab" class="tab-content">
-                <div class="sub-menu sub-menu-history">
-                    <button class="sub-menu-item active" data-type="all">Tất cả</button>
-                    <button class="sub-menu-item" data-type="expense">Chi tiêu</button>
-                    <button class="sub-menu-item" data-type="income">Thu nhập</button>
-                    <button class="sub-menu-item" data-type="filter">Lọc theo Tháng</button>
+        <main class="app-content">
+            
+            <section id="dashboard-tab" class="tab-content active">
+                
+                <div class="welcome-header">
+                    <p>Xin chào, <strong id="current-user-display-dashboard">user!</strong></p>
+                    <h1>QUẢN LÝ CHI TIÊU CHO<br>HỌC SINH TRUNG HỌC PHỔ THÔNG</h1>
                 </div>
 
-                <div id="month-filter-container" class="filter-controls" style="display: none;">
-                    <input type="month" id="history-filter-month">
-                    <button id="apply-history-filter-btn" class="btn primary small-btn">Áp dụng</button>
+                <div class="card total-balance-card">
+                    <div class="card-header-flex">
+                        <p class="title-text"><i class="fas fa-coins"></i> Tổng số dư</p>
+                        <button class="btn suggestion-btn"><i class="fas fa-magic"></i> Nhận Lời Khuyên</button>
+                    </div>
+                    <p id="current-balance-display" class="giant-amount">0 đ</p>
+                    <p class="sub-text">Thu nhập tháng: <span id="monthly-income-display">0 đ</span></p>
+                    
+                    <div class="quick-update-form">
+                        <input type="number" id="quick-income-input" placeholder="Nhập nhanh thu nhập">
+                        <button id="quick-income-save-btn" class="btn primary-save-btn">Lưu</button>
+                    </div>
                 </div>
 
-                <section class="card list-card">
-                    <ul id="transaction-list" class="transaction-list">
-                        </ul>
-                </section>
-            </div>
-
-            <div id="add-transaction-tab" class="tab-content">
-                <section class="card">
-                    <form id="transaction-form" class="form-container">
-                        <label for="type-select">Loại Giao Dịch:</label>
-                        <select id="type-select" required>
-                            <option value="expense">Chi tiêu</option>
-                            <option value="income">Thu nhập</option>
-                        </select>
-
-                        <label for="amount-input">Số tiền (VNĐ):</label>
-                        <input type="number" id="amount-input" placeholder="Nhập số tiền" required min="1">
+                <div class="card savings-pet-card">
+                    <div class="card-header-flex">
+                        <h3>Thú Cưng Tiết Kiệm 🐷🐾</h3>
+                        <span class="link-btn" data-target-setting="pet-collection-content">Bộ sưu tập</span>
+                    </div>
+                    <div class="pet-details">
+                        <img src="https://i.imgur.com/gK2R0cZ.png" alt="Heo Đất" class="pet-icon">
+                        <div class="pet-info">
+                            <p class="pet-name">Heo Con</p>
+                            <p class="pet-level">Cấp độ: 1</p>
+                            <p class="pet-progress">Tiến hóa: <span id="pet-evolution-progress">0/50.000đ</span></p>
+                            <div class="progress-bar-container-small">
+                                <div id="savings-progress-bar-small" class="progress-bar-small"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card jar-container">
+                    <h3>6 Chiếc Lọ Của Bạn 🏺</h3>
+                    <div class="jar-grid">
                         
-                        <label for="category-select">Hạng mục:</label>
-                        <select id="category-select" required>
-                            <option value="an-uong">Ăn Uống</option>
-                            <option value="hoc-tap">Học Tập</option>
-                            <option value="giai-tri">Giải Trí</option>
-                            <option value="di-chuyen">Di Chuyển</option>
-                            <option value="mua-sam">Mua Sắm</option>
-                            <option value="chi-phi-khac">Chi phí khác</option>
-                            <option value="khac">Khác</option>
-                        </select>
+                        <div class="jar-item jar-nec">
+                            <i class="fas fa-shopping-bag jar-icon"></i>
+                            <p class="jar-name">Chi tiêu cần thiết</p>
+                            <p class="jar-percent"> (NEC - 55%)</p>
+                            <p class="jar-amount">0 đ</p>
+                        </div>
+                        
+                        <div class="jar-item jar-ltss">
+                            <i class="fas fa-wallet jar-icon"></i>
+                            <p class="jar-name">Tiết kiệm dài hạn</p>
+                            <p class="jar-percent"> (LTSS - 10%)</p>
+                            <p class="jar-amount">0 đ</p>
+                        </div>
 
-                        <label for="date-input">Ngày:</label>
-                        <input type="date" id="date-input" required>
+                        <div class="jar-item jar-edu">
+                            <i class="fas fa-book-reader jar-icon"></i>
+                            <p class="jar-name">Giáo dục</p>
+                            <p class="jar-percent"> (EDU - 10%)</p>
+                            <p class="jar-amount">0 đ</p>
+                        </div>
+                        
+                        <div class="jar-item jar-play">
+                            <i class="fas fa-gamepad jar-icon"></i>
+                            <p class="jar-name">Hưởng thụ</p>
+                            <p class="jar-percent"> (PLAY - 10%)</p>
+                            <p class="jar-amount">0 đ</p>
+                        </div>
+                        
+                        <div class="jar-item jar-ff">
+                            <i class="fas fa-dollar-sign jar-icon"></i>
+                            <p class="jar-name">Tự do tài chính</p>
+                            <p class="jar-percent"> (FF - 10%)</p>
+                            <p class="jar-amount">0 đ</p>
+                        </div>
+                        
+                        <div class="jar-item jar-give">
+                            <i class="fas fa-gift jar-icon"></i>
+                            <p class="jar-name">Cho đi</p>
+                            <p class="jar-percent"> (GIVE - 5%)</p>
+                            <p class="jar-amount">0 đ</p>
+                        </div>
+                    </div>
+                </div>
 
-                        <label for="note-input">Ghi chú (Tùy chọn):</label>
-                        <input type="text" id="note-input" placeholder="Ví dụ: Ăn trưa với bạn bè">
+                <div class="card chart-card" style="display: none;">
+                    <h4>Phân bổ Chi tiêu Tháng</h4>
+                    <canvas id="monthlyPieChart"></canvas>
+                </div>
+                
+                <div class="card chart-card" style="display: none;">
+                    <h4>Chi tiêu 5 ngày gần nhất</h4>
+                    <canvas id="historyBarChart"></canvas>
+                </div>
 
-                        <button type="submit" class="btn primary full-width">Lưu Giao Dịch</button>
+            </section>
+
+            <section id="add-transaction-tab" class="tab-content">
+                <div class="card">
+                    <h2><i class="fas fa-plus-circle"></i> Thêm Giao Dịch Mới</h2>
+                    <form id="transaction-form">
+                        <div class="input-group">
+                            <label for="amount-input"><i class="fas fa-money-bill-wave"></i> Số tiền (VNĐ)</label>
+                            <input type="number" id="amount-input" min="1" required>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label for="type-select"><i class="fas fa-exchange-alt"></i> Loại Giao Dịch</label>
+                            <select id="type-select" required>
+                                <option value="expense">Chi Tiêu</option>
+                                <option value="income">Thu Nhập</option>
+                            </select>
+                        </div>
+                        
+                        <div id="expense-category-container" class="input-group">
+                            <label for="category-select"><i class="fas fa-tag"></i> Danh Mục Chi Tiêu</label>
+                            <select id="category-select" required>
+                                <option value="an-uong">Ăn Uống</option>
+                                <option value="hoc-tap">Học Tập</option>
+                                <option value="giai-tri">Giải Trí</option>
+                                <option value="di-chuyen">Di Chuyển</option>
+                                <option value="mua-sam">Mua Sắm</option>
+                                <option value="tiet-kiem">Chuyển vào Quỹ Tiết Kiệm</option>
+                                <option value="chi-phi-khac">Chi phí khác</option>
+                            </select>
+                        </div>
+
+                        <div id="income-category-container" class="input-group" style="display: none;">
+                            <label for="income-category-select"><i class="fas fa-tag"></i> Danh Mục Thu Nhập</label>
+                            <select id="income-category-select" required>
+                                <option value="thu-nhap-chinh">Thu Nhập Chính</option>
+                                <option value="thu-nhap-phu">Thu Nhập Phụ</option>
+                                <option value="khac">Khác</option>
+                            </select>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label for="date-input"><i class="fas fa-calendar-day"></i> Ngày</label>
+                            <input type="date" id="date-input" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="note-input"><i class="fas fa-sticky-note"></i> Ghi Chú</label>
+                            <input type="text" id="note-input">
+                        </div>
+                        
+                        <button type="submit" class="btn primary-btn">Lưu Giao Dịch</button>
                     </form>
-                </section>
-            </div>
+                </div>
+            </section>
 
-            <div id="savings-tab" class="tab-content">
-                <section class="card savings-summary">
-                    <p class="card-title">Quỹ Tiết Kiệm: <span id="savings-name-display">Mục tiêu mặc định</span></p>
-                    <p class="current-savings">Số dư Quỹ: <strong id="savings-current-amount">0 VNĐ</strong></p>
-                    <p class="goal-savings">Mục tiêu: <strong id="savings-goal-display">0 VNĐ</strong></p>
+            <section id="savings-tab" class="tab-content">
+                <div class="card">
+                    <h2><i class="fas fa-piggy-bank"></i> Quỹ Tiết Kiệm</h2>
+                    <p>Mục tiêu hiện tại: <strong id="savings-name-display">Chưa thiết lập</strong></p>
+                    <p>Đã tích lũy: <strong id="savings-current-amount">0 VNĐ</strong></p>
+                    <p>Mục tiêu: <strong id="savings-goal-display">0 VNĐ</strong></p>
+                    
                     <div class="progress-bar-container">
                         <div id="savings-progress-bar" class="progress-bar"></div>
                     </div>
-                </section>
+                </div>
 
-                <section class="card">
-                    <h4 class="card-title">Thiết Lập Mục Tiêu Quỹ</h4>
-                    <form id="savings-form" class="form-container">
-                        <label for="savings-name">Tên Mục Tiêu:</label>
-                        <input type="text" id="savings-name" placeholder="Ví dụ: Mua laptop mới" required>
-
-                        <label for="savings-goal-input">Giá Trị Mục Tiêu (VNĐ):</label>
-                        <input type="number" id="savings-goal-input" placeholder="Nhập mục tiêu" min="1" required>
-
-                        <label for="savings-password">Mật khẩu Quỹ (Để chuyển/rút tiền):</label>
-                        <input type="password" id="savings-password" placeholder="Mật khẩu quỹ" minlength="4" required>
-                        
-                        <button type="submit" class="btn primary full-width">Lưu Mục Tiêu</button>
-                    </form>
-                </section>
-
-                <section class="card">
-                    <h4 class="card-title">Chuyển Tiền Vào Quỹ</h4>
-                    <form id="savings-transfer-form" class="form-container">
-                        <label for="transfer-amount">Số tiền muốn chuyển (VNĐ):</label>
-                        <input type="number" id="transfer-amount" placeholder="Nhập số tiền" min="1" required>
-
-                        <label for="transfer-password">Mật khẩu Quỹ:</label>
-                        <input type="password" id="transfer-password" placeholder="Nhập mật khẩu" required>
-                        
-                        <button type="submit" class="btn secondary full-width">Chuyển Tiền</button>
-                    </form>
-                </section>
+                <div id="pet-collection-content" class="settings-content card active">
+                    <h3>Bộ Sưu Tập Thú Cưng</h3>
+                    <div id="pet-collection-list" class="pet-collection-grid">
+                        </div>
+                </div>
                 
-                <section class="card">
-                    <button id="show-withdraw-form-btn" class="btn danger full-width">Rút Tiền Tiết Kiệm</button>
-                    <div id="savings-withdraw-form-container" class="form-container" style="display: none; margin-top: 15px; padding-top: 15px; border-top: 1px dashed #ccc;">
-                        <h4 class="card-title">Thực hiện Rút Tiền</h4>
+                <div class="card">
+                    <h3>1. Thiết Lập Mục Tiêu</h3>
+                    <form id="savings-form">
+                        <div class="input-group">
+                            <label for="savings-name"><i class="fas fa-bullseye"></i> Tên Mục tiêu</label>
+                            <input type="text" id="savings-name" placeholder="Ví dụ: Mua laptop" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="savings-goal-input"><i class="fas fa-dollar-sign"></i> Số tiền Mục tiêu (VNĐ)</label>
+                            <input type="number" id="savings-goal-input" min="1000" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="savings-password"><i class="fas fa-lock"></i> Mật khẩu Quỹ (4-6 số)</label>
+                            <input type="password" id="savings-password" minlength="4" maxlength="6" required>
+                        </div>
+                        <button type="submit" class="btn primary-btn">Thiết Lập/Cập Nhật Mục Tiêu</button>
+                    </form>
+                </div>
+                
+                <div class="card">
+                    <h3>2. Chuyển Tiền Vào Quỹ</h3>
+                    <form id="savings-transfer-form">
+                        <div class="input-group">
+                            <label for="transfer-amount"><i class="fas fa-arrow-right"></i> Số tiền chuyển (VNĐ)</label>
+                            <input type="number" id="transfer-amount" min="1" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="transfer-password"><i class="fas fa-key"></i> Mật khẩu Quỹ</label>
+                            <input type="password" id="transfer-password" minlength="4" maxlength="6" required>
+                        </div>
+                        <button type="submit" class="btn secondary-btn">Chuyển Vào Quỹ</button>
+                    </form>
+                </div>
+                
+                <div class="card">
+                    <button id="show-withdraw-form-btn" class="btn accent-btn" style="width: 100%;">Rút Tiền Tiết Kiệm</button>
+                    
+                    <div id="savings-withdraw-form-container" style="display: none; margin-top: 15px;">
+                        <h4 style="margin-top: 0;">Rút Tiền Từ Quỹ</h4>
                         <form id="savings-withdraw-form">
-                            <label for="withdraw-amount">Số tiền muốn rút (VNĐ):</label>
-                            <input type="number" id="withdraw-amount" placeholder="Nhập số tiền" min="1" required>
-
-                            <label for="withdraw-password">Mật khẩu Quỹ:</label>
-                            <input type="password" id="withdraw-password" placeholder="Nhập mật khẩu" required>
-                            
-                            <button type="submit" class="btn danger full-width">Xác Nhận Rút Tiền</button>
+                            <div class="input-group">
+                                <label for="withdraw-amount"><i class="fas fa-arrow-left"></i> Số tiền muốn rút (VNĐ)</label>
+                                <input type="number" id="withdraw-amount" min="1" required>
+                            </div>
+                            <div class="input-group">
+                                <label for="withdraw-password"><i class="fas fa-key"></i> Mật khẩu Quỹ</label>
+                                <input type="password" id="withdraw-password" minlength="4" maxlength="6" required>
+                            </div>
+                            <button type="submit" class="btn warning-btn">Xác Nhận Rút Tiền</button>
                         </form>
                     </div>
-                </section>
-            </div>
+                </div>
+            </section>
 
-            <div id="settings-tab" class="tab-content">
-                <section class="card">
-                    <h4 class="card-title">Tài khoản: <span id="current-user-display-setting"></span></h4>
-                    <div class="sub-menu sub-menu-settings">
-                        <button class="sub-menu-item active" data-target-setting="profile-settings-content">Hồ sơ Chi tiêu</button>
-                        <button class="sub-menu-item" data-target-setting="password-settings-content">Đổi Mật khẩu</button>
+            <section id="history-tab" class="tab-content">
+                <div class="card filter-card">
+                    <div class="sub-menu-history">
+                        <button class="sub-menu-item active" data-type="all"><i class="fas fa-list-ul"></i> Tất Cả</button>
+                        <button class="sub-menu-item" data-type="income"><i class="fas fa-arrow-up"></i> Thu Nhập</button>
+                        <button class="sub-menu-item" data-type="expense"><i class="fas fa-arrow-down"></i> Chi Tiêu</button>
+                        <button class="sub-menu-item" data-type="filter"><i class="fas fa-calendar-alt"></i> Lọc Tháng</button>
                     </div>
-                </section>
-
-                <section id="profile-settings-content" class="card settings-content active">
-                    <h4 class="card-title">Cập nhật Hồ sơ Chi tiêu</h4>
-                    <form id="profile-settings-form" class="form-container">
-                        <label for="set-monthly-income">Thu nhập Hàng tháng (VNĐ):</label>
-                        <input type="number" id="set-monthly-income" min="0" required>
-                        
-                        <label for="set-daily-limit">Giới hạn Chi tiêu Ngày (VNĐ):</label>
-                        <input type="number" id="set-daily-limit" min="0">
-                        
-                        <button type="submit" class="btn primary full-width">Cập Nhật Hồ Sơ</button>
-                    </form>
-                </section>
+                    
+                    <div id="month-filter-container" style="display: none; margin-top: 10px; align-items: flex-end;">
+                        <div class="input-group" style="flex-grow: 1;">
+                            <label for="history-filter-month">Chọn Tháng</label>
+                            <input type="month" id="history-filter-month" value="">
+                        </div>
+                        <button id="apply-history-filter-btn" class="btn primary-btn" style="margin-left: 10px;">Lọc</button>
+                    </div>
+                </div>
                 
-                <section id="password-settings-content" class="card settings-content" style="display: none;">
-                    <h4 class="card-title">Đổi Mật khẩu</h4>
-                    <form id="password-settings-form" class="form-container">
-                        <label for="current-password">Mật khẩu hiện tại:</label>
-                        <input type="password" id="current-password" required>
-                        
-                        <label for="new-password">Mật khẩu mới:</label>
-                        <input type="password" id="new-password" minlength="6" required>
-                        
-                        <label for="confirm-new-password">Xác nhận Mật khẩu mới:</label>
-                        <input type="password" id="confirm-new-password" minlength="6" required>
-                        
-                        <button type="submit" class="btn danger full-width">Đổi Mật Khẩu</button>
-                    </form>
-                </section>
-                
-                <section class="card">
-                    <h4 class="card-title">Thoát Tài Khoản</h4>
-                    <button id="logout-btn-setting" class="btn secondary full-width">Đăng Xuất</button>
-                </section>
-            </div>
+                <div class="card">
+                    <ul id="transaction-list" class="transaction-list">
+                        <li class="empty-list">Chưa có giao dịch nào được ghi lại.</li>
+                    </ul>
+                </div>
+            </section>
 
+            <section id="settings-tab" class="tab-content">
+                <div class="card">
+                    <p><i class="fas fa-user"></i> Người dùng: <strong id="current-user-display-setting"></strong></p>
+                </div>
+                
+                <div class="sub-menu-settings">
+                    <button class="sub-menu-item active" data-target-setting="profile-settings-content"><i class="fas fa-chart-line"></i> Hồ Sơ Chi Tiêu</button>
+                    <button class="sub-menu-item" data-target-setting="password-settings-content"><i class="fas fa-key"></i> Đổi Mật Khẩu</button>
+                    <button class="sub-menu-item" data-target-setting="about-settings-content"><i class="fas fa-info-circle"></i> Về Ứng Dụng</button>
+                </div>
+
+                <div id="profile-settings-content" class="settings-content active card">
+                    <h3>Cập nhật Hồ Sơ Chi Tiêu</h3>
+                    <form id="profile-settings-form">
+                        <div class="input-group">
+                            <label for="set-monthly-income"><i class="fas fa-coins"></i> Thu nhập dự kiến hàng tháng (VNĐ)</label>
+                            <input type="number" id="set-monthly-income" min="0" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="set-daily-limit"><i class="fas fa-hand-paper"></i> Giới hạn Chi tiêu Ngày (VNĐ)</label>
+                            <input type="number" id="set-daily-limit" min="0" required>
+                        </div>
+                        <button type="submit" class="btn primary-btn">Lưu Cài Đặt</button>
+                    </form>
+                </div>
+
+                <div id="password-settings-content" class="settings-content card" style="display: none;">
+                    <h3>Đổi Mật Khẩu Tài Khoản</h3>
+                    <form id="password-settings-form">
+                        <div class="input-group">
+                            <label for="current-password"><i class="fas fa-lock"></i> Mật khẩu hiện tại</label>
+                            <input type="password" id="current-password" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="new-password"><i class="fas fa-lock-open"></i> Mật khẩu mới</label>
+                            <input type="password" id="new-password" minlength="6" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="confirm-new-password"><i class="fas fa-check-double"></i> Xác nhận mật khẩu mới</label>
+                            <input type="password" id="confirm-new-password" required>
+                        </div>
+                        <button type="submit" class="btn primary-btn">Đổi Mật Khẩu</button>
+                    </form>
+                </div>
+
+                <div id="about-settings-content" class="settings-content card" style="display: none;">
+                    <p>Phiên bản: 1.4 (Pet Tiến Hóa)</p>
+                    <p>Được phát triển bằng HTML, CSS, JavaScript (Vanilla JS và Chart.js).</p>
+                    <p>Ứng dụng hoạt động trên cơ chế lưu trữ cục bộ (LocalStorage).</p>
+                </div>
+                
+                <button id="logout-btn-setting" class="btn warning-btn" style="margin-top: 20px;"><i class="fas fa-sign-out-alt"></i> Thoát Tài Khoản</button>
+            </section>
         </main>
 
         <nav class="bottom-nav">
             <button class="nav-item active" data-target="dashboard-tab">
-                <i class="fas fa-chart-line"></i>
-                <span>Dashboard</span>
+                <i class="fas fa-home"></i>
+                <span>Trang Chủ</span>
             </button>
             <button class="nav-item" data-target="history-tab">
                 <i class="fas fa-history"></i>
@@ -289,24 +426,28 @@
         </nav>
     </div>
 
-    <div id="limit-override-modal" class="modal">
+    <div id="limit-override-modal" class="modal-container" style="display: none;">
         <div class="modal-content">
-            <span class="close-btn" data-modal-close="limit-override-modal">&times;</span>
-            <h4>Xác nhận Vượt Mức Chi Tiêu</h4>
-            <p>Giao dịch này sẽ vượt quá giới hạn chi tiêu ngày của bạn. Vui lòng xác nhận để tiếp tục.</p>
-            <form id="limit-override-form" class="form-container">
-                <label for="override-password">Mật khẩu của bạn:</label>
-                <input type="password" id="override-password" required>
-                
-                <label for="override-reason">Lý do vượt mức:</label>
-                <input type="text" id="override-reason" placeholder="Ví dụ: Chi phí đột xuất" required>
-                
-                <button type="submit" class="btn danger full-width">Xác Nhận & Lưu</button>
-                <button type="button" class="btn secondary full-width" data-modal-cancel="limit-override-modal">Hủy</button>
+            <span class="modal-close" data-modal-close="limit-override-modal">&times;</span>
+            <h2>🚨 CẢNH BÁO VƯỢT MỨC CHI TIÊU</h2>
+            <p>Giao dịch này sẽ vượt quá giới hạn chi tiêu ngày của bạn. Bạn có chắc chắn muốn tiếp tục không?</p>
+            
+            <form id="limit-override-form">
+                <div class="input-group">
+                    <label for="override-reason"><i class="fas fa-sticky-note"></i> Lý do vượt mức</label>
+                    <input type="text" id="override-reason" placeholder="Ví dụ: Mua sách gấp cho bài kiểm tra" required>
+                </div>
+                <div class="input-group">
+                    <label for="override-password"><i class="fas fa-lock"></i> Xác nhận Mật khẩu Tài khoản</label>
+                    <input type="password" id="override-password" required>
+                </div>
+                <button type="submit" class="btn warning-btn">Xác Nhận & Lưu Giao Dịch</button>
+                <button type="button" class="btn secondary-btn" data-modal-cancel="limit-override-modal">Hủy Bỏ Giao Dịch</button>
             </form>
         </div>
     </div>
-    
+
     <script src="script.js"></script>
+
 </body>
 </html>
