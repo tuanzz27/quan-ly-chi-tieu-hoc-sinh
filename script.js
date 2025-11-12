@@ -1,1016 +1,998 @@
-// script.js
+// script.js - Logic cho ứng dụng Quản lý Chi tiêu THPT
 
-// === KHAI BÁO BIẾN TRẠNG THÁI TOÀN CỤC ===
-let appData = loadAppData();
-let currentUser = null; 
-const loggedInUser = appData.users.find(u => u.isLoggedIn);
-if (loggedInUser) {
-    currentUser = loggedInUser;
-}
+// =================================================================
+// CÁC HẰNG VÀ BIẾN TOÀN CỤC
+// =================================================================
+const APP_DATA_KEY = 'qlctthpt_appData';
+let appData = {};
+let currentTransaction = null; // Biến lưu giao dịch tạm thời (dùng cho Modal vượt mức)
 
-// === KHAI BÁO CÁC PHẦN TỬ UI QUAN TRỌNG ===
-const authScreen = document.getElementById('auth-screen');
-const profileSetupScreen = document.getElementById('profile-setup-screen');
-const mainApp = document.getElementById('main-app');
-const globalMessage = document.getElementById('global-message');
+const screens = document.querySelectorAll('.screen-container');
+const tabContents = document.querySelectorAll('.tab-content');
+const navItems = document.querySelectorAll('.bottom-nav .nav-item');
 
-// Lấy các element khác
-const currentBalanceDisplay = document.getElementById('current-balance-display'); 
-const monthlyIncomeDisplay = document.getElementById('monthly-income-display'); 
-const addBalanceContainer = document.getElementById('add-balance-container'); 
-const showAddBalanceFormBtn = document.getElementById('show-add-balance-form-btn'); 
-const dailySpentDisplay = document.getElementById('daily-spent');
-const dailyLimitAlert = document.getElementById('daily-limit-alert'); 
-const transactionList = document.getElementById('transaction-list');
-const transactionForm = document.getElementById('transaction-form');
-const savingsForm = document.getElementById('savings-form');
-const savingsTransferForm = document.getElementById('savings-transfer-form');
-const savingsWithdrawForm = document.getElementById('savings-withdraw-form'); 
-const dateInput = document.getElementById('date-input');
-const monthlyPieChartCanvas = document.getElementById('monthlyPieChart');
-const historyBarChartCanvas = document.getElementById('historyBarChart');
+// Danh sách danh mục chi tiêu (có thể được mở rộng sau)
+const EXPENSE_CATEGORIES = [
+    'an-uong', 'hoc-tap', 'giai-tri', 'di-chuyen', 'mua-sam', 'tiet-kiem', 'chi-phi-khac'
+];
 
-const limitOverrideModal = document.getElementById('limit-override-modal'); 
-const limitOverrideForm = document.getElementById('limit-override-form'); 
-let transactionPending = null; 
+// Cấu trúc Pet và Mốc Tiến Hóa MỚI
+const PET_LEVELS = [
+    { level: 1, name: 'Heo Con', goal: 0, icon: 'https://i.imgur.com/gK2R0cZ.png' }, // Mới bắt đầu
+    { level: 2, name: 'Heo Đất', goal: 50000, icon: 'https://i.imgur.com/vH4H3hA.png' }, // 50,000 đ
+    { level: 3, name: 'Heo Lớn', goal: 150000, icon: 'https://i.imgur.com/jM8vKqC.png' }, // 150,000 đ
+    { level: 4, name: 'Heo Vàng', goal: 500000, icon: 'https://i.imgur.com/yF5wRzO.png' }, // 500,000 đ
+    { level: 5, name: 'Heo Tỷ Phú', goal: 1000000, icon: 'https://i.imgur.com/gK2R0cZ.png' } // 1,000,000 đ (Ví dụ)
+];
 
-let monthlyPieChartInstance = null;
-let historyBarChartInstance = null; 
+/** Hàm trả về Icon tương ứng với Danh mục */
+const getCategoryIcon = (category) => {
+    switch (category) {
+        case 'an-uong': return 'fa-utensils';
+        case 'hoc-tap': return 'fa-book-reader';
+        case 'giai-tri': return 'fa-gamepad';
+        case 'di-chuyen': return 'fa-bus';
+        case 'mua-sam': return 'fa-shopping-bag';
+        case 'tiet-kiem': return 'fa-piggy-bank';
+        case 'chi-phi-khac': return 'fa-stream';
+        case 'thu-nhap-chinh': return 'fa-briefcase';
+        case 'thu-nhap-phu': return 'fa-coins';
+        case 'rut-tiet-kiem': return 'fa-hand-holding-usd';
+        case 'khac': return 'fa-question-circle';
+        default: return 'fa-stream';
+    }
+};
 
-// === HÀM LƯU & TẢI DỮ LIỆU ===
-function loadAppData() {
-    const defaultData = {
-        users: [],
-        categories: {
-            'an-uong': 'Ăn Uống', 'hoc-tap': 'Học Tập', 'giai-tri': 'Giải Trí', 
-            'di-chuyen': 'Di Chuyển', 'mua-sam': 'Mua Sắm', 'chi-phi-khac': 'Chi phí khác',
-            'khac': 'Khác',
-            'thu-nhap-chinh': 'Thu Nhập Chính', 'thu-nhap-phu': 'Thu Nhập Phụ', 'khoi-tao': 'Khởi Tạo',
-            'tiet-kiem': 'Tiết Kiệm', 'rut-tiet-kiem': 'Rút Tiết Kiệm' 
+// Phân bổ 6 Lọ (NEC, LTSS, EDU, PLAY, FF, GIVE)
+const JAR_ALLOCATION = {
+    'NEC': 0.55, // Chi tiêu cần thiết
+    'LTSS': 0.10, // Tiết kiệm dài hạn (Tiết kiệm Mục tiêu)
+    'EDU': 0.10, // Giáo dục
+    'PLAY': 0.10, // Hưởng thụ
+    'FF': 0.10, // Tự do tài chính
+    'GIVE': 0.05, // Cho đi
+};
+
+
+// =================================================================
+// CÁC HÀM TIỆN ÍCH CHUNG
+// =================================================================
+
+/** Hàm định dạng số thành tiền tệ (VNĐ) */
+const formatCurrency = (amount) => {
+    // Sử dụng ' đ' thay vì 'VNĐ' để khớp với yêu cầu giao diện mới
+    return new Intl.NumberFormat('vi-VN', {
+        style: 'decimal',
+        minimumFractionDigits: 0
+    }).format(amount) + ' đ';
+};
+
+/** Lấy ngày hiện tại ở định dạng YYYY-MM-DD */
+const getCurrentDate = () => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+};
+
+/** Hiển thị thông báo toàn cục */
+const showGlobalMessage = (message, type = 'success') => {
+    const msgEl = document.getElementById('global-message');
+    msgEl.textContent = message;
+    msgEl.className = `message ${type}`;
+    msgEl.style.display = 'block';
+    setTimeout(() => {
+        msgEl.style.display = 'none';
+    }, 4000);
+};
+
+/** Lấy dữ liệu ứng dụng từ LocalStorage */
+const loadAppData = () => {
+    const data = localStorage.getItem(APP_DATA_KEY);
+    appData = data ? JSON.parse(data) : {};
+};
+
+/** Lưu dữ liệu ứng dụng vào LocalStorage */
+const saveAppData = () => {
+    localStorage.setItem(APP_DATA_KEY, JSON.stringify(appData));
+};
+
+/** Lấy thông tin người dùng đang đăng nhập */
+const getCurrentUser = () => {
+    const username = localStorage.getItem('currentLoggedInUser');
+    return appData[username] || null;
+};
+
+/** Cập nhật thông tin người dùng đang đăng nhập */
+const updateCurrentUser = (user) => {
+    if (user) {
+        appData[user.username] = user;
+        saveAppData();
+    }
+};
+
+// =================================================================
+// LOGIC CHUYỂN ĐỔI MÀN HÌNH (QUAN TRỌNG ĐỂ FIX LỖI ẨN/HIỆN)
+// =================================================================
+
+/** Ẩn tất cả các màn hình chính */
+const hideAllScreens = () => {
+    screens.forEach(screen => screen.classList.remove('active'));
+};
+
+/** Chuyển đổi trạng thái hiển thị màn hình dựa trên LocalStorage */
+const checkLoginState = () => {
+    const username = localStorage.getItem('currentLoggedInUser');
+    const user = appData[username];
+
+    hideAllScreens();
+
+    if (user && user.isLoggedIn) {
+        // Đã đăng nhập, vào app chính
+        document.getElementById('main-app').classList.add('active');
+        updateAppUI();
+    } else {
+        // Chưa đăng nhập, hiển thị màn hình xác thực
+        document.getElementById('auth-screen').classList.add('active');
+        // Đảm bảo Form Đăng Nhập hiển thị mặc định
+        document.getElementById('login-form').style.display = 'block';
+        document.getElementById('register-form').style.display = 'none';
+        document.getElementById('auth-title').textContent = 'Đăng Nhập';
+        document.getElementById('show-register').style.display = 'block';
+        document.getElementById('show-login').style.display = 'none';
+    }
+    
+    // Đảm bảo màn hình Profile Setup luôn bị ẩn
+    document.getElementById('profile-setup-screen').style.display = 'none';
+};
+
+/** Chuyển tab trong ứng dụng chính */
+const switchTab = (targetId) => {
+    tabContents.forEach(tab => tab.classList.remove('active'));
+    document.getElementById(targetId).classList.add('active');
+    
+    // Cập nhật tiêu đề header
+    const titleMap = {
+        'dashboard-tab': 'Trang Chủ',
+        'history-tab': 'Lịch Sử',
+        'add-transaction-tab': 'Thêm Giao Dịch',
+        'savings-tab': 'Tiết Kiệm',
+        'settings-tab': 'Cài Đặt',
+    };
+    document.getElementById('tab-title').textContent = titleMap[targetId];
+
+    // Cập nhật trạng thái active của thanh nav
+    navItems.forEach(item => item.classList.remove('active'));
+    document.querySelector(`.nav-item[data-target="${targetId}"]`).classList.add('active');
+};
+
+// =================================================================
+// LOGIC XÁC THỰC (Đăng ký, Đăng nhập, Thoát)
+// =================================================================
+
+document.getElementById('show-register').addEventListener('click', () => {
+    document.getElementById('login-form').style.display = 'none';
+    document.getElementById('register-form').style.display = 'block';
+    document.getElementById('auth-title').textContent = 'Đăng Ký';
+    document.getElementById('show-register').style.display = 'none';
+    document.getElementById('show-login').style.display = 'block';
+    document.getElementById('auth-error').textContent = '';
+});
+
+document.getElementById('show-login').addEventListener('click', () => {
+    document.getElementById('login-form').style.display = 'block';
+    document.getElementById('register-form').style.display = 'none';
+    document.getElementById('auth-title').textContent = 'Đăng Nhập';
+    document.getElementById('show-register').style.display = 'block';
+    document.getElementById('show-login').style.display = 'none';
+    document.getElementById('auth-error-reg').textContent = '';
+});
+
+document.getElementById('register-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const username = document.getElementById('register-username').value.trim();
+    const password = document.getElementById('register-password').value;
+    const confirmPassword = document.getElementById('register-confirm-password').value;
+    const errorEl = document.getElementById('auth-error-reg');
+
+    if (password !== confirmPassword) {
+        errorEl.textContent = 'Mật khẩu xác nhận không khớp.';
+        return;
+    }
+
+    if (password.length < 6) {
+        errorEl.textContent = 'Mật khẩu phải có ít nhất 6 ký tự.';
+        return;
+    }
+
+    if (appData[username]) {
+        errorEl.textContent = 'Tên đăng nhập đã tồn tại.';
+        return;
+    }
+
+    // Đăng ký thành công, tạo user object VÀ THIẾT LẬP GIÁ TRỊ MẶC ĐỊNH
+    appData[username] = {
+        username,
+        password, // Lưu mật khẩu đơn giản (trong môi trường thực tế cần hash)
+        isLoggedIn: true,
+        transactions: [],
+        balance: 0, // Mặc định 0 VNĐ
+        monthlyIncome: 0, // Mặc định 0 VNĐ (sẽ được cập nhật ở Setting)
+        dailyLimit: 0, // Mặc định 0 (không giới hạn)
+        savings: {
+            name: 'Quỹ chung',
+            goal: 0,
+            currentAmount: 0,
+            password: null, // Mật khẩu Quỹ Tiết Kiệm
+            unlockedPets: [PET_LEVELS[0].name], // Bắt đầu với Pet đầu tiên: Heo Con
+        },
+        jars: { // Khởi tạo 6 Lọ
+            NEC: 0,
+            LTSS: 0,
+            EDU: 0,
+            PLAY: 0,
+            FF: 0,
+            GIVE: 0
         }
     };
-    const data = localStorage.getItem('financeFlowData');
-    return data ? JSON.parse(data) : defaultData;
-}
 
-function saveAppData() {
-    localStorage.setItem('financeFlowData', JSON.stringify(appData));
-}
-
-// === HÀM TIỆN ÍCH CHUNG ===
-function formatCurrency(amount) {
-    if (typeof amount !== 'number') return '0 VNĐ';
-
-    const formattedAmount = new Intl.NumberFormat('vi-VN', {
-        minimumFractionDigits: 0, 
-        maximumFractionDigits: 0
-    }).format(Math.abs(amount));
-    
-    return `${formattedAmount} VNĐ`;
-}
-
-function showMessage(msg, type = 'success') {
-    globalMessage.textContent = msg;
-    globalMessage.className = `message active ${type}`;
-    globalMessage.style.display = 'block';
-    
-    setTimeout(() => {
-        globalMessage.style.display = 'none';
-        globalMessage.classList.remove('active');
-    }, 3000);
-}
-
-function getCurrentDate() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-}
-
-// HÀM TÍNH TỔNG SỐ DƯ
-function calculateBalance(transactions, initialBalance) {
-    let balance = initialBalance;
-    transactions.forEach(t => {
-        if (t.type === 'income' && t.category !== 'rut-tiet-kiem') { 
-            balance += t.amount;
-        } else if (t.type === 'expense' && t.category !== 'tiet-kiem') {
-            balance -= t.amount;
-        }
-    });
-    
-     transactions.forEach(t => {
-        if (t.category === 'rut-tiet-kiem') {
-            balance += t.amount;
-        }
-    });
-    return balance;
-}
-
-function saveTransaction(transaction, overrideReason = '') {
-    if (overrideReason) {
-        transaction.note = `[VƯỢT MỨC: ${overrideReason}] ${transaction.note}`;
-    }
-    
-    currentUser.transactions.push(transaction);
+    localStorage.setItem('currentLoggedInUser', username);
     saveAppData();
+    showGlobalMessage('Đăng ký thành công! Chào mừng bạn.', 'success');
+    checkLoginState(); // Chuyển thẳng vào App
+});
+
+document.getElementById('login-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errorEl = document.getElementById('auth-error');
+    const user = appData[username];
+
+    if (!user || user.password !== password) {
+        errorEl.textContent = 'Tên đăng nhập hoặc mật khẩu không đúng.';
+        return;
+    }
+
+    // Đăng nhập thành công
+    user.isLoggedIn = true;
+    localStorage.setItem('currentLoggedInUser', username);
     
-    // SỬA LỖI 1: Sau khi lưu giao dịch, chỉ cần cập nhật dashboard (bao gồm biểu đồ) và history.
-    updateAppUI('dashboard-tab'); 
-    updateAppUI('history-tab'); 
+    // Đảm bảo trường jars và unlockedPets tồn tại (cho người dùng cũ)
+    if (!user.jars) {
+        user.jars = { NEC: 0, LTSS: 0, EDU: 0, PLAY: 0, FF: 0, GIVE: 0 };
+    }
+    if (!user.savings.unlockedPets) {
+        user.savings.unlockedPets = [PET_LEVELS[0].name];
+    }
+    
+    updateCurrentUser(user);
+    showGlobalMessage('Đăng nhập thành công!', 'success');
+    checkLoginState();
+});
+
+document.getElementById('logout-btn-app').addEventListener('click', logout);
+document.getElementById('logout-btn-setting').addEventListener('click', logout);
+
+function logout() {
+    const user = getCurrentUser();
+    if (user) {
+        user.isLoggedIn = false;
+        updateCurrentUser(user);
+    }
+    localStorage.removeItem('currentLoggedInUser');
+    showGlobalMessage('Bạn đã đăng xuất.', 'success');
+    checkLoginState();
 }
 
-function checkSavingsCompletion() {
-    if (!currentUser) return false;
-    const savings = currentUser.savings;
+// =================================================================
+// LOGIC CẬP NHẬT GIAO DỊCH VÀ SỐ DƯ
+// =================================================================
 
-    if (savings.goal > 0 && savings.currentAmount >= savings.goal) {
-        const completedGoal = {
-            id: Date.now().toString(),
-            name: savings.name,
-            goal: savings.goal,
-            amount: savings.currentAmount,
-            completedDate: getCurrentDate()
-        };
-        
-        if (!currentUser.savingsHistory) {
-            currentUser.savingsHistory = [];
+/** Tính toán lại số dư, thu nhập/chi tiêu tháng và ngày */
+const calculateBalance = (user) => {
+    // Tính số dư (Mọi thứ đều là transaction)
+    user.balance = user.transactions.reduce((acc, trans) => {
+        if (trans.type === 'income') {
+            return acc + trans.amount;
+        } else if (trans.type === 'expense') {
+            return acc - trans.amount;
         }
-        currentUser.savingsHistory.push(completedGoal);
+        return acc;
+    }, 0);
 
-        savings.currentAmount = 0; 
-        savings.goal = 0;
-        savings.name = 'Mục tiêu mới';
-        savings.password = '';
+    // Tính toán chi tiêu tháng/ngày
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const today = getCurrentDate();
+    
+    // Chi tiêu không tính phần chuyển vào tiết kiệm
+    const monthlyExpense = user.transactions
+        .filter(t => t.type === 'expense' && t.date.startsWith(currentMonth) && t.category !== 'tiet-kiem')
+        .reduce((sum, t) => sum + t.amount, 0);
         
-        showMessage(`🎉 CHÚC MỪNG! Bạn đã hoàn thành mục tiêu "${completedGoal.name}" (${formatCurrency(completedGoal.goal)})! Mục tiêu đã được reset, bạn có thể thiết lập mục tiêu mới.`, 'success');
-        return true;
+    const monthlyIncome = user.transactions
+        .filter(t => t.type === 'income' && t.date.startsWith(currentMonth))
+        .reduce((sum, t) => sum + t.amount, 0);
+
+
+    const dailyExpense = user.transactions
+        .filter(t => t.type === 'expense' && t.date === today && t.category !== 'tiet-kiem')
+        .reduce((sum, t) => sum + t.amount, 0);
+    
+    return {
+        balance: user.balance,
+        monthlyExpense,
+        dailyExpense,
+        monthlyIncome
+    };
+};
+
+/** Cập nhật thông tin chi tiết người dùng */
+const updateAppUI = () => {
+    const user = getCurrentUser();
+    if (!user) return;
+
+    const { balance, monthlyExpense, dailyExpense, monthlyIncome } = calculateBalance(user);
+
+    // Cập nhật Dashboard (Giao diện MỚI)
+    document.getElementById('current-user-display-dashboard').textContent = user.username; 
+    document.getElementById('current-balance-display').textContent = formatCurrency(balance);
+    
+    // Thu nhập tháng hiện tại (tính từ các giao dịch income)
+    document.getElementById('monthly-income-display').textContent = formatCurrency(monthlyIncome); 
+
+    // Cập nhật cảnh báo giới hạn ngày (giữ lại nếu cần)
+    const dailyLimitAlert = document.getElementById('daily-limit-alert');
+    // Giao diện mới không có cảnh báo này, nhưng giữ logic đề phòng
+    if (dailyLimitAlert) { 
+        if (user.dailyLimit > 0 && dailyExpense > user.dailyLimit) {
+            dailyLimitAlert.style.display = 'block';
+            dailyLimitAlert.textContent = `🚨 Đã vượt giới hạn ngày: ${formatCurrency(user.dailyLimit)}! Bạn đã chi ${formatCurrency(dailyExpense)}.`;
+        } else {
+            dailyLimitAlert.style.display = 'none';
+        }
     }
-    return false;
+    
+    // Cập nhật thông tin người dùng ở Header
+    document.getElementById('current-user-display').textContent = user.username;
+    document.getElementById('current-user-display-setting').textContent = user.username;
+
+    // Cập nhật Tiết Kiệm (Heo Đất/Pet)
+    renderSavingsUI(user);
+    
+    // Cập nhật 6 Chiếc Lọ - **Sử dụng monthlyIncome được tính toán TỪ GIAO DỊCH**
+    renderJarsUI(user, monthlyIncome);
+    
+    // Tải lại lịch sử và biểu đồ (Ẩn trong HTML nhưng giữ logic đề phòng)
+    renderTransactionList(user.transactions.slice().reverse());
+    // renderMonthlyPieChart(user); // Đã ẩn chart
+    // renderHistoryBarChart(user); // Đã ẩn chart
+    
+    updateCurrentUser(user);
+};
+
+// =================================================================
+// LOGIC THÊM GIAO DỊCH
+// =================================================================
+
+document.getElementById('type-select').addEventListener('change', (e) => {
+    const type = e.target.value;
+    document.getElementById('expense-category-container').style.display = type === 'expense' ? 'block' : 'none';
+    document.getElementById('income-category-container').style.display = type === 'income' ? 'block' : 'none';
+});
+
+document.getElementById('transaction-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const amount = parseFloat(document.getElementById('amount-input').value);
+    const type = document.getElementById('type-select').value;
+    const date = document.getElementById('date-input').value;
+    const note = document.getElementById('note-input').value.trim();
+    let category = '';
+
+    if (type === 'expense') {
+        category = document.getElementById('category-select').value;
+    } else {
+        category = document.getElementById('income-category-select').value;
+    }
+
+    const newTransaction = {
+        id: Date.now(),
+        amount,
+        type,
+        category,
+        date,
+        note,
+    };
+
+    currentTransaction = newTransaction; // Lưu tạm thời
+
+    const user = getCurrentUser();
+    const { dailyExpense } = calculateBalance(user);
+
+    // Xử lý CẢNH BÁO VƯỢT MỨC TRƯỚC KHI LƯU
+    const isExpense = newTransaction.type === 'expense' && newTransaction.category !== 'tiet-kiem';
+    if (isExpense && user.dailyLimit > 0 && dailyExpense + amount > user.dailyLimit) {
+        // Hiển thị modal xác nhận vượt mức
+        document.getElementById('limit-override-modal').style.display = 'flex';
+        // Reset form giao dịch sau khi modal được hiển thị
+        document.getElementById('transaction-form').reset();
+        return; 
+    }
+    
+    // Nếu không vượt mức hoặc là giao dịch thu nhập, tiến hành lưu
+    saveTransaction(newTransaction);
+});
+
+// Hàm lưu giao dịch thực sự
+function saveTransaction(transaction, isOverride = false, overrideReason = '') {
+    const user = getCurrentUser();
+
+    if (transaction.type === 'expense' && transaction.category === 'tiet-kiem') {
+        // Xử lý chuyển tiền vào Quỹ Tiết Kiệm (Nếu đến từ form thêm giao dịch)
+        user.transactions.push(transaction);
+        user.savings.currentAmount += transaction.amount;
+        
+        // Kiểm tra và mở khóa pet
+        checkPetEvolution(user); 
+
+        updateCurrentUser(user);
+        showGlobalMessage(`Đã chuyển ${formatCurrency(transaction.amount)} vào Quỹ Tiết Kiệm.`, 'success');
+        document.getElementById('transaction-form').reset();
+        updateAppUI();
+        return; 
+    }
+    
+    if (isOverride) {
+        transaction.note = `[Vượt Mức - ${overrideReason}] ${transaction.note}`;
+    }
+
+    user.transactions.push(transaction);
+    
+    updateCurrentUser(user);
+    showGlobalMessage('Giao dịch đã được lưu.', 'success');
+    document.getElementById('transaction-form').reset();
+    updateAppUI();
 }
 
-function withdrawSavings(amount, password) {
-    const savings = currentUser.savings;
-    
-    if (password !== savings.password) {
-        showMessage('Mật khẩu Quỹ không đúng.', 'error');
-        return false;
+// =================================================================
+// LOGIC NHẬP NHANH THU NHẬP (TRÊN DASHBOARD MỚI)
+// ** ĐÃ TỐI ƯU ĐỂ KÍCH HOẠT PHÂN BỔ 6 LỌ **
+// =================================================================
+document.getElementById('quick-income-save-btn').addEventListener('click', () => {
+    const inputEl = document.getElementById('quick-income-input');
+    const amount = parseFloat(inputEl.value);
+
+    if (isNaN(amount) || amount <= 0) {
+        showGlobalMessage('Vui lòng nhập số tiền thu nhập hợp lệ.', 'error');
+        return;
     }
+
+    const user = getCurrentUser();
     
-    if (amount <= 0 || amount > savings.currentAmount) {
-        showMessage('Số tiền rút không hợp lệ hoặc vượt quá số dư Quỹ.', 'error');
-        return false;
-    }
-    
-    savings.currentAmount -= amount;
-    
-    currentUser.transactions.push({
-        id: Date.now().toString(),
+    const newTransaction = {
+        id: Date.now(),
         amount: amount,
+        type: 'income',
+        category: 'thu-nhap-chinh', 
+        date: getCurrentDate(),
+        note: 'Thu nhập nhanh từ Dashboard',
+    };
+
+    user.transactions.push(newTransaction);
+    
+    updateCurrentUser(user);
+    showGlobalMessage(`Đã thêm ${formatCurrency(amount)} vào Thu nhập. Các Lọ đã được phân bổ lại.`, 'success');
+    inputEl.value = '';
+    
+    // **UPDATEAPPUI SẼ TỰ ĐỘNG GỌI renderJarsUI VỚI THU NHẬP MỚI**
+    updateAppUI(); 
+});
+
+
+// =================================================================
+// LOGIC MODAL VƯỢT MỨC
+// =================================================================
+
+document.getElementById('limit-override-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const overridePassword = document.getElementById('override-password').value;
+    const overrideReason = document.getElementById('override-reason').value.trim();
+    const user = getCurrentUser();
+
+    if (!user || user.password !== overridePassword) {
+        showGlobalMessage('Mật khẩu tài khoản không chính xác.', 'error');
+        return;
+    }
+
+    if (!currentTransaction || !overrideReason) {
+        showGlobalMessage('Lỗi hệ thống hoặc lý do không hợp lệ.', 'error');
+        return;
+    }
+
+    // Lưu giao dịch sau khi xác nhận vượt mức
+    saveTransaction(currentTransaction, true, overrideReason);
+    
+    // Đóng modal và reset form
+    document.getElementById('limit-override-modal').style.display = 'none';
+    document.getElementById('limit-override-form').reset();
+    currentTransaction = null; 
+});
+
+// Đóng modal khi click Hủy
+document.querySelector('[data-modal-cancel="limit-override-modal"]').addEventListener('click', () => {
+    document.getElementById('limit-override-modal').style.display = 'none';
+    currentTransaction = null;
+    showGlobalMessage('Giao dịch vượt mức đã bị hủy.', 'warning');
+});
+
+// =================================================================
+// LOGIC TIẾT KIỆM (SAVINGS) & HEO ĐẤT/PET
+// =================================================================
+
+/** Tìm Pet cấp độ hiện tại dựa trên số tiền */
+function getCurrentPet(currentAmount) {
+    // Tìm Pet cao nhất mà số tiền đã đạt được
+    const achievedPet = PET_LEVELS
+        .filter(pet => currentAmount >= pet.goal)
+        .sort((a, b) => b.level - a.level)[0];
+
+    // Tìm Pet tiếp theo cần đạt được
+    const nextPet = PET_LEVELS.find(pet => pet.level === achievedPet.level + 1);
+
+    return {
+        current: achievedPet,
+        next: nextPet || null
+    };
+}
+
+/** Kiểm tra và mở khóa Pet mới */
+function checkPetEvolution(user) {
+    const currentAmount = user.savings.currentAmount;
+    
+    PET_LEVELS.forEach(pet => {
+        // Kiểm tra xem đã đạt mục tiêu của Pet này chưa VÀ Pet này chưa được mở khóa
+        if (currentAmount >= pet.goal && !user.savings.unlockedPets.includes(pet.name)) {
+            user.savings.unlockedPets.push(pet.name);
+            showGlobalMessage(`🎉 CHÚC MỪNG! Pet mới đã được mở khóa: ${pet.name}!`, 'success');
+        }
+    });
+}
+
+/** Cập nhật UI Tiết Kiệm và Pet */
+function renderSavingsUI(user) {
+    const savings = user.savings;
+    const { current, next } = getCurrentPet(savings.currentAmount);
+
+    // Cập nhật Tab Tiết Kiệm (UI cũ)
+    document.getElementById('savings-name-display').textContent = savings.name;
+    document.getElementById('savings-current-amount').textContent = formatCurrency(savings.currentAmount);
+    document.getElementById('savings-goal-display').textContent = formatCurrency(savings.goal);
+    
+    const progress = savings.goal > 0 ? (savings.currentAmount / savings.goal) * 100 : 0;
+    const progressBar = document.getElementById('savings-progress-bar');
+    progressBar.style.width = `${Math.min(100, progress)}%`;
+    
+    // Cập nhật Pet (Dashboard UI mới)
+    let petProgressText = 'Đã đạt cấp tối đa!';
+    let petPercent = 100;
+
+    if (next) {
+        // Đang tiến hóa đến Pet tiếp theo
+        const requiredAmount = next.goal - current.goal;
+        const currentProgress = savings.currentAmount - current.goal;
+        petProgressText = `${formatCurrency(currentProgress)}/${formatCurrency(requiredAmount)}`;
+        petPercent = (currentProgress / requiredAmount) * 100;
+
+        // Đặc biệt: Nếu goal của Pet 1 (Heo Con) là 0, thì Pet 2 (Heo Đất) là 50k
+        if (current.level === 1) {
+            petProgressText = `${formatCurrency(savings.currentAmount)}/${formatCurrency(next.goal)}`;
+            petPercent = (savings.currentAmount / next.goal) * 100;
+        }
+    }
+
+    // Hiển thị Pet hiện tại
+    document.querySelector('.pet-icon').src = current.icon;
+    document.querySelector('.pet-name').textContent = current.name;
+    document.querySelector('.pet-level').textContent = `Cấp độ: ${current.level}`;
+    document.getElementById('pet-evolution-progress').textContent = petProgressText;
+    document.getElementById('savings-progress-bar-small').style.width = `${petPercent}%`;
+    
+    // Cập nhật Bộ Sưu Tập Pet
+    renderPetCollection(user.savings.unlockedPets);
+}
+
+/** Hiển thị các Pet đã mở khóa */
+function renderPetCollection(unlockedPets) {
+    const collectionEl = document.getElementById('pet-collection-list');
+    if(!collectionEl) return; // Bảo vệ nếu HTML bị thiếu
+    
+    collectionEl.innerHTML = ''; 
+
+    PET_LEVELS.forEach(pet => {
+        const isUnlocked = unlockedPets.includes(pet.name);
+        const petItem = document.createElement('div');
+        petItem.className = `pet-collection-item ${isUnlocked ? 'unlocked' : 'locked'}`;
+        
+        if (isUnlocked) {
+            petItem.innerHTML = `
+                <img src="${pet.icon}" alt="${pet.name}">
+                <p>${pet.name}</p>
+                <p class="pet-status">Cấp ${pet.level}</p>
+            `;
+        } else {
+            petItem.innerHTML = `
+                <i class="fas fa-lock pet-lock-icon"></i>
+                <p>???</p>
+                <p class="pet-status">Mục tiêu: ${formatCurrency(pet.goal)}</p>
+            `;
+        }
+        collectionEl.appendChild(petItem);
+    });
+}
+
+// Xử lý Form Thiết Lập/Cập nhật Mục tiêu Tiết kiệm
+document.getElementById('savings-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = document.getElementById('savings-name').value.trim();
+    const goal = parseFloat(document.getElementById('savings-goal-input').value);
+    const password = document.getElementById('savings-password').value;
+
+    if (password.length < 4 || password.length > 6 || isNaN(parseInt(password))) {
+        showGlobalMessage('Mật khẩu Quỹ phải là 4-6 chữ số.', 'error');
+        return;
+    }
+    
+    const user = getCurrentUser();
+    user.savings.name = name;
+    user.savings.goal = goal;
+    user.savings.password = password;
+    
+    updateCurrentUser(user);
+    showGlobalMessage('Mục tiêu Quỹ đã được thiết lập/cập nhật.', 'success');
+    renderSavingsUI(user);
+});
+
+// Xử lý Form Chuyển tiền vào Quỹ (Form riêng trong tab Tiết Kiệm)
+document.getElementById('savings-transfer-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const transferAmount = parseFloat(document.getElementById('transfer-amount').value);
+    const password = document.getElementById('transfer-password').value;
+    const user = getCurrentUser();
+    
+    if (isNaN(transferAmount) || transferAmount <= 0) {
+         showGlobalMessage('Vui lòng nhập số tiền hợp lệ.', 'error');
+        return;
+    }
+    
+    if (!user.savings.password || user.savings.password !== password) {
+        showGlobalMessage('Mật khẩu Quỹ Tiết Kiệm không đúng hoặc chưa thiết lập.', 'error');
+        return;
+    }
+    
+    const { balance } = calculateBalance(user);
+    if (transferAmount > balance) {
+        showGlobalMessage('Số dư tài khoản chính không đủ.', 'error');
+        return;
+    }
+    
+    // 1. Ghi lại giao dịch "Chuyển vào Quỹ" (Loại Expense)
+    user.transactions.push({
+        id: Date.now(),
+        amount: transferAmount,
+        type: 'expense',
+        category: 'tiet-kiem',
+        date: getCurrentDate(),
+        note: `Chuyển trực tiếp vào quỹ ${user.savings.name}`,
+        isSavingsTransfer: true, 
+    });
+
+    // 2. Cập nhật số dư Quỹ
+    user.savings.currentAmount += transferAmount;
+    
+    // Kiểm tra và mở khóa pet
+    checkPetEvolution(user);
+
+    updateCurrentUser(user);
+    showGlobalMessage(`Đã chuyển ${formatCurrency(transferAmount)} vào Quỹ.`, 'success');
+    document.getElementById('savings-transfer-form').reset();
+    updateAppUI();
+});
+
+// Xử lý Hiển thị Form Rút tiền
+document.getElementById('show-withdraw-form-btn').addEventListener('click', () => {
+    const container = document.getElementById('savings-withdraw-form-container');
+    container.style.display = container.style.display === 'none' ? 'block' : 'none';
+});
+
+// Xử lý Form Rút tiền Tiết kiệm
+document.getElementById('savings-withdraw-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const withdrawAmount = parseFloat(document.getElementById('withdraw-amount').value);
+    const password = document.getElementById('withdraw-password').value;
+    const user = getCurrentUser();
+
+    if (isNaN(withdrawAmount) || withdrawAmount <= 0) {
+         showGlobalMessage('Vui lòng nhập số tiền hợp lệ.', 'error');
+        return;
+    }
+    
+    if (!user.savings.password || user.savings.password !== password) {
+        showGlobalMessage('Mật khẩu Quỹ Tiết Kiệm không đúng hoặc chưa thiết lập.', 'error');
+        return;
+    }
+    
+    if (withdrawAmount > user.savings.currentAmount) {
+        showGlobalMessage('Số tiền rút vượt quá số dư Quỹ Tiết Kiệm.', 'error');
+        return;
+    }
+
+    // 1. Ghi lại giao dịch "Rút tiền Tiết kiệm" (Loại Income) vào tài khoản chính
+    user.transactions.push({
+        id: Date.now(),
+        amount: withdrawAmount,
         type: 'income',
         category: 'rut-tiet-kiem', 
         date: getCurrentDate(),
-        note: `Rút tiền từ Quỹ Tiết kiệm (${savings.name})`
+        note: `Rút tiền từ quỹ ${user.savings.name}`,
     });
 
-    saveAppData();
-    updateAppUI('dashboard-tab');
-    updateAppUI('savings-tab');
-    showMessage(`Đã rút thành công ${formatCurrency(amount)} từ Quỹ Tiết kiệm!`, 'success');
-    return true;
+    // 2. Cập nhật số dư Quỹ
+    user.savings.currentAmount -= withdrawAmount;
+
+    updateCurrentUser(user);
+    showGlobalMessage(`Đã rút ${formatCurrency(withdrawAmount)} từ Quỹ.`, 'success');
+    document.getElementById('savings-withdraw-form').reset();
+    document.getElementById('savings-withdraw-form-container').style.display = 'none';
+    updateAppUI();
+});
+
+// =================================================================
+// LOGIC 6 CHIẾC LỌ (JARS)
+// ** ĐÃ TỐI ƯU HIỂN THỊ PHẦN TRĂM **
+// =================================================================
+
+function renderJarsUI(user, monthlyIncome) {
+    const monthlyBudget = monthlyIncome; // Sử dụng tổng thu nhập tháng làm cơ sở phân bổ
+    
+    // Tính toán lại giá trị cho từng Lọ
+    user.jars.NEC = Math.round(monthlyBudget * JAR_ALLOCATION.NEC);
+    user.jars.LTSS = Math.round(monthlyBudget * JAR_ALLOCATION.LTSS);
+    user.jars.EDU = Math.round(monthlyBudget * JAR_ALLOCATION.EDU);
+    user.jars.PLAY = Math.round(monthlyBudget * JAR_ALLOCATION.PLAY);
+    user.jars.FF = Math.round(monthlyBudget * JAR_ALLOCATION.FF);
+    user.jars.GIVE = Math.round(monthlyBudget * JAR_ALLOCATION.GIVE);
+    
+    // Cập nhật hiển thị (Dựa trên số tiền phân bổ)
+    document.querySelector('.jar-nec .jar-amount').textContent = formatCurrency(user.jars.NEC);
+    document.querySelector('.jar-ltss .jar-amount').textContent = formatCurrency(user.jars.LTSS);
+    document.querySelector('.jar-edu .jar-amount').textContent = formatCurrency(user.jars.EDU);
+    document.querySelector('.jar-play .jar-amount').textContent = formatCurrency(user.jars.PLAY);
+    document.querySelector('.jar-ff .jar-amount').textContent = formatCurrency(user.jars.FF);
+    document.querySelector('.jar-give .jar-amount').textContent = formatCurrency(user.jars.GIVE);
+    
+    // Cập nhật phần trăm hiển thị (làm tròn 0 chữ số thập phân)
+    // FIX LỖI HIỂN THỊ PHẦN TRĂM DƯ THỪA (VÍ DỤ: 55.00000000000001%)
+    document.querySelector('.jar-nec .jar-percent').textContent = ` (NEC - ${ (JAR_ALLOCATION.NEC * 100).toFixed(0)}%)`;
+    document.querySelector('.jar-ltss .jar-percent').textContent = ` (LTSS - ${ (JAR_ALLOCATION.LTSS * 100).toFixed(0)}%)`;
+    document.querySelector('.jar-edu .jar-percent').textContent = ` (EDU - ${ (JAR_ALLOCATION.EDU * 100).toFixed(0)}%)`;
+    document.querySelector('.jar-play .jar-percent').textContent = ` (PLAY - ${ (JAR_ALLOCATION.PLAY * 100).toFixed(0)}%)`;
+    document.querySelector('.jar-ff .jar-percent').textContent = ` (FF - ${ (JAR_ALLOCATION.FF * 100).toFixed(0)}%)`;
+    document.querySelector('.jar-give .jar-percent').textContent = ` (GIVE - ${ (JAR_ALLOCATION.GIVE * 100).toFixed(0)}%)`;
+
+    updateCurrentUser(user);
 }
 
+// =================================================================
+// LOGIC LỊCH SỬ GIAO DỊCH
+// =================================================================
 
-// === HÀM RENDER BIỂU ĐỒ ===
+function renderTransactionList(transactions) {
+    const listEl = document.getElementById('transaction-list');
+    listEl.innerHTML = ''; 
 
-function renderMonthlyPieChart() {
-    if (!currentUser || !monthlyPieChartCanvas) return;
-    
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-
-    const monthlyExpenses = currentUser.transactions.filter(t => {
-        const date = new Date(t.date + 'T00:00:00'); // Thêm 'T00:00:00' để tránh vấn đề múi giờ
-        return t.type === 'expense' && t.category !== 'tiet-kiem' && 
-               date.getMonth() === currentMonth && date.getFullYear() === currentYear;
-    });
-
-    const categoryTotals = monthlyExpenses.reduce((acc, t) => {
-        const categoryName = appData.categories[t.category] || t.category;
-        acc[categoryName] = (acc[categoryName] || 0) + t.amount;
-        return acc;
-    }, {});
-
-    const labels = Object.keys(categoryTotals);
-    const data = Object.values(categoryTotals);
-    
-    const backgroundColors = [
-        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', 
-        '#FF9F40', '#E7E9ED', '#8AC926', '#1982C4', '#6A4C93'
-    ];
-
-    if (monthlyPieChartInstance) {
-        monthlyPieChartInstance.destroy(); 
-    }
-    
-    const chartContainer = monthlyPieChartCanvas.parentElement;
-
-    const chartTitleElement = chartContainer.closest('.card').querySelector('h4');
-
-    if (labels.length === 0) {
-        if(chartTitleElement) chartTitleElement.textContent = 'Phân bổ Chi tiêu Tháng (Chưa có chi tiêu)';
-        monthlyPieChartCanvas.style.display = 'none';
-        return;
-    }
-    
-    monthlyPieChartCanvas.style.display = 'block';
-    if(chartTitleElement) chartTitleElement.textContent = 'Phân bổ Chi tiêu Tháng';
-
-    const ctx = monthlyPieChartCanvas.getContext('2d');
-    if (!ctx) return; 
-
-    monthlyPieChartInstance = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: data,
-                backgroundColor: backgroundColors.slice(0, labels.length),
-                hoverOffset: 4
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                },
-                title: {
-                    display: false,
-                }
-            }
-        }
-    });
-}
-
-function renderHistoryBarChart() {
-    if (!currentUser || !historyBarChartCanvas) return;
-    
-    const allExpenses = currentUser.transactions.filter(t => 
-        t.type === 'expense' && t.category !== 'tiet-kiem'
-    );
-
-    const dates = [...new Set(allExpenses.map(t => t.date))].sort().reverse().slice(0, 5).reverse();
-    
-    const chartContainer = historyBarChartCanvas.parentElement;
-    const chartTitleElement = chartContainer.closest('.card').querySelector('h4');
-
-
-    if (dates.length === 0) {
-        if (historyBarChartInstance) historyBarChartInstance.destroy();
-        if(chartTitleElement) chartTitleElement.textContent = 'Chi tiêu 5 ngày gần nhất (Chưa có dữ liệu)';
-        historyBarChartCanvas.style.display = 'none';
-        return;
-    }
-    
-    historyBarChartCanvas.style.display = 'block';
-    if(chartTitleElement) chartTitleElement.textContent = 'Chi tiêu 5 ngày gần nhất';
-
-    const dailyTotals = dates.map(date => {
-        return allExpenses.filter(t => t.date === date)
-                          .reduce((sum, t) => sum + t.amount, 0);
-    });
-
-    const labels = dates.map(date => {
-        const d = new Date(date + 'T00:00:00'); 
-        return `${d.getDate()}/${d.getMonth() + 1}`;
-    });
-
-    if (historyBarChartInstance) {
-        historyBarChartInstance.destroy();
-    }
-    
-    const ctx = historyBarChartCanvas.getContext('2d');
-    if (!ctx) return;
-
-    historyBarChartInstance = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Tổng Chi Tiêu (VNĐ)',
-                data: dailyTotals,
-                backgroundColor: 'rgba(54, 162, 235, 0.5)',
-                borderColor: 'rgba(54, 162, 235, 1)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        callback: function(value, index, values) {
-                            return new Intl.NumberFormat('vi-VN').format(value);
-                        }
-                    }
-                }
-            },
-            plugins: {
-                legend: {
-                    display: false
-                }
-            }
-        }
-    });
-}
-// === KẾT THÚC HÀM RENDER BIỂU ĐỒ ===
-
-
-// HÀM UPDATE DASHBOARD 
-function updateDashboard() {
-    if (!currentUser) return;
-    
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-    const monthlyIncome = currentUser.profile.monthlyIncome;
-    
-    let monthlyBudgetBalance = monthlyIncome;
-
-    // Tính toán Số dư Ngân sách Hàng tháng: Thu nhập tháng - Chi tiêu/Tiết kiệm
-    currentUser.transactions.forEach(t => {
-        // Chỉ tính giao dịch trong tháng hiện tại
-        const date = new Date(t.date + 'T00:00:00');
-        if (date.getMonth() === currentMonth && date.getFullYear() === currentYear) {
-            
-            // Chi tiêu (expense) bao gồm cả chi tiêu thông thường và chuyển vào tiết kiệm (tiet-kiem)
-            // Lưu ý: Rút tiền tiết kiệm (rut-tiet-kiem) là income, nó không bị trừ vào ngân sách tháng
-            if (t.type === 'expense') {
-                monthlyBudgetBalance -= t.amount;
-            } 
-        }
-    });
-    
-    // 1. Cập nhật hiển thị số dư bằng Số dư Ngân sách Hàng tháng mới
-    currentBalanceDisplay.textContent = formatCurrency(monthlyBudgetBalance); 
-    currentBalanceDisplay.classList.toggle('negative', monthlyBudgetBalance < 0);
-
-    // 2. Tính toán Số dư Tổng thể (lifetime) để kiểm tra cảnh báo nạp thêm tiền
-    const lifetimeBalance = calculateBalance(currentUser.transactions, currentUser.profile.initialBalance);
-
-    monthlyIncomeDisplay.textContent = formatCurrency(currentUser.profile.monthlyIncome);
-    
-    const todayStr = getCurrentDate();
-    const dailySpent = currentUser.transactions.filter(t => 
-        t.type === 'expense' && t.date === todayStr && t.category !== 'tiet-kiem' 
-    ).reduce((sum, t) => sum + t.amount, 0);
-    
-    dailySpentDisplay.textContent = formatCurrency(dailySpent);
-
-    // Cảnh báo thêm tiền vẫn dựa trên số dư tổng thể (lifetimeBalance)
-    if (lifetimeBalance <= 0) { 
-        addBalanceContainer.style.display = 'block'; 
-    } else {
-        addBalanceContainer.style.display = 'none'; 
-    }
-    
-    const dailyLimit = currentUser.profile.dailyLimit;
-    if (dailyLimit > 0 && dailySpent >= dailyLimit) {
-        dailyLimitAlert.textContent = 'Bạn đã vượt quá giới hạn chi tiêu ngày!';
-        dailyLimitAlert.style.display = 'block';
-    } else if (dailyLimit > 0 && dailySpent > dailyLimit * 0.8) {
-         dailyLimitAlert.textContent = 'Sắp đạt giới hạn chi tiêu ngày.';
-         dailyLimitAlert.style.display = 'block';
-    } else {
-        dailyLimitAlert.style.display = 'none';
-    }
-    
-    renderMonthlyPieChart();
-    renderHistoryBarChart();
-}
-// END OF HÀM UPDATE DASHBOARD
-
-function updateHistoryList(filterType = 'all', filterMonth = '') {
-    if (!currentUser || !transactionList) return;
-    const transactions = [...currentUser.transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    const [filterYear, filterMon] = filterMonth.split('-');
-    
-    const filteredList = transactions.filter(t => {
-        let isMatch = true;
-        if (t.category === 'khoi-tao') return false; 
-        
-        // Lọc theo loại giao dịch
-        if (filterType !== 'all') {
-            if (filterType === 'income') {
-                // Thu nhập: Giao dịch income HOẶC rút tiết kiệm
-                if (t.type !== 'income' && t.category !== 'rut-tiet-kiem') { 
-                    isMatch = false;
-                }
-            } else if (filterType === 'expense') { 
-                // Chi tiêu: Giao dịch expense VÀ KHÔNG phải chuyển vào tiết kiệm
-                if (t.type !== 'expense' || t.category === 'tiet-kiem') {
-                    isMatch = false;
-                }
-            }
-        }
-        
-        // Lọc theo tháng
-        if (filterMonth) {
-            const date = new Date(t.date + 'T00:00:00'); 
-            if (date.getFullYear() !== parseInt(filterYear) || date.getMonth() + 1 !== parseInt(filterMon)) {
-                isMatch = false;
-            }
-        }
-        return isMatch;
-    });
-
-    transactionList.innerHTML = '';
-    if (filteredList.length === 0) {
-        transactionList.innerHTML = '<li class="empty-list">Không tìm thấy giao dịch nào.</li>';
+    if (transactions.length === 0) {
+        listEl.innerHTML = '<li class="empty-list">Chưa có giao dịch nào được ghi lại.</li>';
         return;
     }
 
-    filteredList.forEach(t => {
+    transactions.forEach(trans => {
         const li = document.createElement('li');
-        let typeClass = t.type === 'expense' ? 'expense-item' : 'income-item';
-        let amountText = t.type === 'expense' ? 
-            `<span class="item-amount negative">- ${formatCurrency(t.amount)}</span>` : 
-            `<span class="item-amount positive">+ ${formatCurrency(t.amount)}</span>`;
+        li.className = `transaction-item ${trans.type}`;
+        
+        // Icon
+        const iconClass = getCategoryIcon(trans.category);
+        let categoryText = trans.category.charAt(0).toUpperCase() + trans.category.slice(1).replace(/-/g, ' ');
 
-        if (t.category === 'tiet-kiem') {
-            typeClass = 'savings-item';
-            amountText = `<span class="item-amount negative">-> ${formatCurrency(t.amount)} (Quỹ)</span>`;
+        if (trans.category === 'tiet-kiem') {
+            categoryText = 'Chuyển Quỹ';
+        } else if (trans.category === 'rut-tiet-kiem') {
+            categoryText = 'Rút Tiết Kiệm';
         }
-        if (t.category === 'rut-tiet-kiem') {
-            typeClass = 'savings-item';
-            amountText = `<span class="item-amount positive">+ ${formatCurrency(t.amount)} (Rút)</span>`;
-        }
-        const categoryLabel = appData.categories[t.category] || t.category;
 
-
-        li.className = `${typeClass} ${t.id}`;
         li.innerHTML = `
-            <div class="item-details">
-                <p><strong>${categoryLabel}</strong> - <span class="small-text">${t.note || 'Không ghi chú'}</span></p>
-                <p class="small-text">${t.date}</p>
+            <div class="transaction-icon"><i class="fas ${iconClass}"></i></div>
+            <div class="transaction-details">
+                <span class="transaction-category">${categoryText}</span>
+                <span class="transaction-note">${trans.note || 'Không ghi chú'}</span>
+                <span class="transaction-date">${trans.date}</span>
             </div>
-            ${amountText}
-            <div class="item-actions">
-                <button onclick="deleteTransaction('${t.id}')"><i class="fas fa-trash"></i></button>
+            <div class="transaction-amount ${trans.type}">
+                ${formatCurrency(trans.amount)}
+                <button class="delete-btn" data-id="${trans.id}"><i class="fas fa-trash"></i></button>
             </div>
         `;
-        transactionList.appendChild(li);
+        listEl.appendChild(li);
+    });
+    
+    // Gắn sự kiện xóa
+    listEl.querySelectorAll('.delete-btn').forEach(button => {
+        button.addEventListener('click', deleteTransaction);
     });
 }
 
-function updateSavingsUI() {
-    if (!currentUser) return;
-    const savings = currentUser.savings;
-    document.getElementById('savings-name-display').textContent = savings.name || 'Chưa thiết lập';
-    document.getElementById('savings-current-amount').textContent = formatCurrency(savings.currentAmount);
-    document.getElementById('savings-goal-display').textContent = formatCurrency(savings.goal);
-
-    const percent = savings.goal > 0 ? (savings.currentAmount / savings.goal) * 100 : 0;
-    document.getElementById('savings-progress-bar').style.width = `${Math.min(percent, 100)}%`;
+function deleteTransaction(e) {
+    const idToDelete = parseInt(e.currentTarget.getAttribute('data-id'));
+    const user = getCurrentUser();
     
-    // Nút rút tiền chỉ hiển thị nếu quỹ có tiền
-    document.getElementById('show-withdraw-form-btn').style.display = savings.currentAmount > 0 ? 'block' : 'none';
-    
-    // Cập nhật giá trị vào form thiết lập
-    document.getElementById('savings-name').value = savings.name === 'Mục tiêu mặc định' ? '' : savings.name;
-    document.getElementById('savings-goal-input').value = savings.goal > 0 ? savings.goal : '';
-}
+    // Tìm giao dịch cần xóa
+    const transIndex = user.transactions.findIndex(t => t.id === idToDelete);
+    if (transIndex === -1) return;
 
-function updateSettingsUI() {
-    if (!currentUser) return;
-    document.getElementById('current-user-display-setting').textContent = currentUser.username; 
-    document.getElementById('set-monthly-income').value = currentUser.profile.monthlyIncome;
-    document.getElementById('set-daily-limit').value = currentUser.profile.dailyLimit;
-}
+    const transaction = user.transactions[transIndex];
 
-// HÀM UPDATE UI TỔNG THỂ 
-function updateAppUI(targetTab) {
-    if (!currentUser) return;
-    
-    document.getElementById('current-user-display').textContent = currentUser.username;
-    
-    // Kiểm tra và xử lý hoàn thành mục tiêu tiết kiệm
-    if (checkSavingsCompletion()) {
-        saveAppData(); 
-    }
-
-    if (targetTab === 'dashboard-tab') {
-        updateDashboard();
-    } else if (targetTab === 'history-tab') {
-        const activeFilter = document.querySelector('.sub-menu-history .sub-menu-item.active');
-        const historyFilterType = activeFilter ? activeFilter.dataset.type : 'all';
-        const historyFilterMonth = document.getElementById('history-filter-month').value;
-        // Nếu đang lọc theo tháng, loại mặc định là 'all'
-        const finalFilterType = historyFilterType === 'filter' ? 'all' : historyFilterType;
-
-        updateHistoryList(finalFilterType, historyFilterMonth);
-    } else if (targetTab === 'savings-tab') {
-        updateSavingsUI();
-    } else if (targetTab === 'settings-tab') {
-        updateSettingsUI();
+    // Xử lý trường hợp xóa giao dịch chuyển quỹ (cần hoàn lại quỹ)
+    if (transaction.category === 'tiet-kiem') {
+        user.savings.currentAmount -= transaction.amount;
+        checkPetEvolution(user); // Kiểm tra lại sau khi số tiền thay đổi
     }
     
-    // Đặt lại ngày cho form giao dịch mỗi lần vào tab Thêm giao dịch
-    if (targetTab === 'add-transaction-tab') {
-        dateInput.value = getCurrentDate();
+    // Xử lý trường hợp xóa giao dịch rút quỹ (cần trừ số dư quỹ)
+    if (transaction.category === 'rut-tiet-kiem') {
+        // Hoàn lại tiền vào quỹ vì giao dịch income bị xóa
+        user.savings.currentAmount += transaction.amount;
+        checkPetEvolution(user); // Kiểm tra lại sau khi số tiền thay đổi
     }
+    
+    user.transactions.splice(transIndex, 1);
+    
+    updateCurrentUser(user);
+    showGlobalMessage('Đã xóa giao dịch.', 'warning');
+    updateAppUI(); 
 }
 
-function deleteTransaction(id) {
-    if (!confirm('Bạn có chắc chắn muốn xóa giao dịch này không?')) return;
+// Lọc lịch sử
+document.querySelectorAll('.sub-menu-history button').forEach(button => {
+    button.addEventListener('click', (e) => {
+        document.querySelectorAll('.sub-menu-history button').forEach(btn => btn.classList.remove('active'));
+        e.target.classList.add('active');
+
+        const type = e.target.getAttribute('data-type');
+        const user = getCurrentUser();
+        let filteredTransactions = user.transactions.slice().reverse();
+
+        document.getElementById('month-filter-container').style.display = 'none';
+
+        if (type === 'income' || type === 'expense') {
+            filteredTransactions = filteredTransactions.filter(t => t.type === type);
+            renderTransactionList(filteredTransactions);
+        } else if (type === 'all') {
+            renderTransactionList(filteredTransactions);
+        } else if (type === 'filter') {
+            document.getElementById('month-filter-container').style.display = 'flex';
+        }
+    });
+});
+
+document.getElementById('apply-history-filter-btn').addEventListener('click', () => {
+    const selectedMonth = document.getElementById('history-filter-month').value;
+    const user = getCurrentUser();
     
-    const initialLength = currentUser.transactions.length;
-    currentUser.transactions = currentUser.transactions.filter(t => t.id !== id);
+    let filteredTransactions = user.transactions.slice().reverse();
     
-    if (currentUser.transactions.length < initialLength) {
-        saveAppData();
-        updateAppUI('dashboard-tab');
-        updateAppUI('history-tab');
-        showMessage('Đã xóa giao dịch thành công!', 'success');
-    } else {
-        showMessage('Không tìm thấy giao dịch để xóa.', 'error');
+    if (selectedMonth) {
+        filteredTransactions = filteredTransactions.filter(t => t.date.startsWith(selectedMonth));
     }
-}
+
+    renderTransactionList(filteredTransactions);
+    showGlobalMessage(`Đã lọc ${filteredTransactions.length} giao dịch.`, 'info');
+});
+
+// =================================================================
+// LOGIC BIỂU ĐỒ (CHART.JS) - ĐÃ BỎ QUA
+// =================================================================
+// Các hàm biểu đồ không được sử dụng trong giao diện mới này,
+// nhưng giữ định nghĩa để tránh lỗi nếu bạn muốn dùng lại sau.
+function renderMonthlyPieChart(user) { /* Logic Chart */ }
+function renderHistoryBarChart(user) { /* Logic Chart */ }
 
 
-// === HÀM KHỞI TẠO ỨNG DỤNG VÀ GÁN LISTENERS (QUAN TRỌNG NHẤT) ===
-function initApp() {
-    
-    // --- 1. GÁN LISTENERS CHO THANH ĐIỀU HƯỚNG DƯỚI CÙNG (Fix lỗi chính) ---
-    document.querySelectorAll('.bottom-nav .nav-item').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const target = btn.dataset.target;
-            
-            // Xóa active class khỏi tất cả các nút
-            document.querySelectorAll('.bottom-nav .nav-item').forEach(i => i.classList.remove('active'));
-            // Thêm active class vào nút được click
-            btn.classList.add('active');
-            
-            // Ẩn tất cả tab và chỉ hiện tab được chọn
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.toggle('active', content.id === target);
-            });
-            
-            const tabTitle = document.getElementById('tab-title');
-            if(tabTitle) tabTitle.textContent = btn.querySelector('span').textContent.trim();
-            
-            // Cập nhật nội dung tab
-            updateAppUI(target);
+// =================================================================
+// LOGIC CÀI ĐẶT
+// =================================================================
+
+// Chuyển đổi giữa các cài đặt (Hồ sơ, Mật khẩu, Về ứng dụng)
+document.querySelectorAll('.sub-menu-settings button').forEach(button => {
+    button.addEventListener('click', (e) => {
+        document.querySelectorAll('.sub-menu-settings button').forEach(btn => btn.classList.remove('active'));
+        e.target.classList.add('active');
+
+        document.querySelectorAll('.settings-content').forEach(content => {
+            content.style.display = 'none';
         });
+        
+        const targetId = e.target.getAttribute('data-target-setting');
+        document.getElementById(targetId).style.display = 'block';
+        
+        if (targetId === 'profile-settings-content') {
+            // Tải dữ liệu hiện tại vào form
+            const user = getCurrentUser();
+            document.getElementById('set-monthly-income').value = user.monthlyIncome;
+            document.getElementById('set-daily-limit').value = user.dailyLimit;
+        }
     });
+});
 
-    // 2. Gán Listeners cho ĐĂNG KÝ / ĐĂNG NHẬP
-    document.getElementById('show-register').addEventListener('click', () => {
-        document.getElementById('login-form').style.display = 'none';
-        document.getElementById('register-form').style.display = 'block';
-        document.getElementById('auth-error').textContent = '';
-    });
-    document.getElementById('show-login').addEventListener('click', () => {
-        document.getElementById('register-form').style.display = 'none';
-        document.getElementById('login-form').style.display = 'block';
-        document.getElementById('auth-error').textContent = '';
-    });
+document.getElementById('profile-settings-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const monthlyIncome = parseFloat(document.getElementById('set-monthly-income').value);
+    const dailyLimit = parseFloat(document.getElementById('set-daily-limit').value);
     
-    // 3. Xử lý ĐĂNG KÝ
-    document.getElementById('register-form').addEventListener('submit', (e) => {
-        e.preventDefault();
-        const username = document.getElementById('register-username').value.trim();
-        const password = document.getElementById('register-password').value;
-        const confirmPassword = document.getElementById('register-confirm-password').value;
-        const authError = document.getElementById('auth-error-reg'); 
-        authError.textContent = '';
-        
-        if (password.length < 6) {
-             authError.textContent = 'Mật khẩu phải ít nhất 6 ký tự.';
-             return;
-        }
-
-        if (password !== confirmPassword) {
-            authError.textContent = 'Mật khẩu xác nhận không khớp.';
-            return;
-        }
-        
-        if (appData.users.some(u => u.username === username)) {
-            authError.textContent = 'Tên đăng nhập đã tồn tại.';
-            return;
-        }
-
-        appData.tempUser = { username, password }; 
-        authScreen.classList.remove('active');
-        profileSetupScreen.classList.add('active');
-        showMessage('Đăng ký thành công! Hãy thiết lập hồ sơ của bạn.', 'success');
-    });
-
-    // 4. Xử lý THIẾT LẬP PROFILE
-    document.getElementById('profile-form').addEventListener('submit', (e) => {
-        e.preventDefault();
-        
-        if (!appData.tempUser) {
-            profileSetupScreen.classList.remove('active');
-            authScreen.classList.add('active');
-            showMessage('Lỗi phiên đăng ký. Vui lòng đăng ký lại.', 'error');
-            return;
-        }
-
-        const initialBalance = parseInt(document.getElementById('initial-balance').value) || 0;
-        const monthlyIncome = parseInt(document.getElementById('monthly-income').value) || 0;
-        const dailyLimit = parseInt(document.getElementById('daily-limit').value) || 0;
-
-        appData.users.forEach(u => u.isLoggedIn = false);
-        
-        const newUser = {
-            username: appData.tempUser.username,
-            password: appData.tempUser.password, 
-            isLoggedIn: true,
-            profile: { initialBalance, monthlyIncome, dailyLimit },
-            transactions: [{ 
-                id: Date.now().toString(),
-                amount: initialBalance,
-                type: 'income',
-                category: 'khoi-tao',
-                date: getCurrentDate(),
-                note: 'Số dư khởi tạo'
-            }],
-            savings: {
-                currentAmount: 0, goal: 0, password: '', name: 'Mục tiêu mặc định'
-            },
-            savingsHistory: [] 
-        };
-
-        appData.users.push(newUser);
-        currentUser = newUser;
-        delete appData.tempUser; 
-        saveAppData();
-        
-        profileSetupScreen.classList.remove('active');
-        mainApp.classList.add('active');
-        
-        // Kích hoạt dashboard sau khi đã đăng nhập
-        document.querySelector('.bottom-nav .nav-item[data-target="dashboard-tab"]').click(); 
-        showMessage('Thiết lập hoàn tất! Chào mừng đến với Sổ Tay Chi Tiêu Cá Nhân.', 'success');
-    });
-
-    // 5. Xử lý ĐĂNG NHẬP
-    document.getElementById('login-form').addEventListener('submit', (e) => {
-        e.preventDefault();
-        const username = document.getElementById('login-username').value.trim();
-        const password = document.getElementById('login-password').value;
-        const authError = document.getElementById('auth-error');
-        authError.textContent = '';
-
-        const userIndex = appData.users.findIndex(u => u.username === username && u.password === password);
-
-        if (userIndex !== -1) {
-            appData.users.forEach(u => u.isLoggedIn = false);
-            appData.users[userIndex].isLoggedIn = true;
-            currentUser = appData.users[userIndex];
-            
-            saveAppData();
-            
-            authScreen.classList.remove('active');
-            mainApp.classList.add('active');
-            
-            // Kích hoạt dashboard sau khi đã đăng nhập
-            document.querySelector('.bottom-nav .nav-item[data-target="dashboard-tab"]').click(); 
-            showMessage(`Chào mừng trở lại, ${currentUser.username}!`, 'success');
-        } else {
-            authError.textContent = 'Sai tên đăng nhập hoặc mật khẩu.';
-        }
-    });
-
-    // 6. Xử lý THOÁT
-    const logoutHandler = () => {
-        if (currentUser) {
-            const userInApp = appData.users.find(u => u.username === currentUser.username);
-            if(userInApp) {
-                 userInApp.isLoggedIn = false;
-            }
-            
-            saveAppData();
-            currentUser = null;
-            mainApp.classList.remove('active');
-            authScreen.classList.add('active');
-            // Đảm bảo màn hình đăng nhập hiển thị đúng form
-            document.getElementById('register-form').style.display = 'none';
-            document.getElementById('login-form').style.display = 'block';
-            showMessage('Đã đăng xuất.', 'info');
-        }
-    };
-    document.getElementById('logout-btn-app').addEventListener('click', logoutHandler);
-    document.getElementById('logout-btn-setting').addEventListener('click', logoutHandler);
+    const user = getCurrentUser();
     
-    // 7. Gán Listeners cho các nút lọc Lịch sử
-    document.querySelectorAll('.sub-menu-history .sub-menu-item').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.sub-menu-history .sub-menu-item').forEach(i => i.classList.remove('active'));
-            btn.classList.add('active');
-            const type = btn.dataset.type;
-            const monthContainer = document.getElementById('month-filter-container');
-            
-            if (type === 'filter') {
-                monthContainer.style.display = 'flex'; 
-            } else {
-                monthContainer.style.display = 'none';
-                updateHistoryList(type, ''); 
-            }
-        });
-    });
+    // Cập nhật Thu nhập dự kiến
+    user.monthlyIncome = monthlyIncome;
+    user.dailyLimit = dailyLimit;
     
-    document.getElementById('apply-history-filter-btn').addEventListener('click', () => {
-        const month = document.getElementById('history-filter-month').value;
-        // Nếu đang lọc theo tháng, ta dùng filterMonth và loại mặc định là 'all'
-        updateHistoryList('all', month);
-    });
+    updateCurrentUser(user);
+    showGlobalMessage('Cài đặt hồ sơ chi tiêu đã được cập nhật.', 'success');
+    updateAppUI(); 
+});
 
-    // 8. Gán Listener cho THÊM GIAO DỊCH
-    transactionForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        
-        const form = e.target;
-        const amount = parseInt(document.getElementById('amount-input').value);
-        const type = document.getElementById('type-select').value;
-        const category = document.getElementById('category-select').value;
-        const date = document.getElementById('date-input').value;
-        const note = document.getElementById('note-input').value.trim();
-        const dailyLimit = currentUser.profile.dailyLimit;
-        
-        if (amount <= 0) {
-            showMessage('Số tiền phải lớn hơn 0.', 'error');
-            return;
-        }
-        
-        const balance = calculateBalance(currentUser.transactions, currentUser.profile.initialBalance);
-        // Thay đổi: Kiểm tra số dư trước khi cho phép giao dịch Chi tiêu
-        if (type === 'expense' && amount > balance) {
-             showMessage('Số dư hiện tại không đủ để thực hiện giao dịch này.', 'error');
-             return;
-        }
-
-        let finalCategory = category;
-        if (type === 'income') {
-             // Thay đổi category cho income, mặc định là Thu nhập Chính nếu không có lựa chọn khác
-             finalCategory = 'thu-nhap-chinh'; 
-        }
-
-        const newTransaction = { id: Date.now().toString(), amount, type, category: finalCategory, date, note };
-        
-        // Kiểm tra giới hạn chi tiêu ngày
-        if (type === 'expense' && finalCategory !== 'tiet-kiem' && dailyLimit > 0 && date === getCurrentDate()) { 
-            const dailySpentBefore = currentUser.transactions.filter(t => 
-                t.type === 'expense' && t.date === date && t.category !== 'tiet-kiem' 
-            ).reduce((sum, t) => sum + t.amount, 0);
-            
-            if (dailySpentBefore + amount > dailyLimit) {
-                transactionPending = newTransaction; 
-                limitOverrideModal.style.display = 'block';
-                return; 
-            }
-        }
-        
-        // SỬA LỖI 2: Sau khi lưu giao dịch thành công (không cần override)
-        saveTransaction(newTransaction);
-        form.reset();
-        document.getElementById('date-input').value = getCurrentDate();
-        showMessage('Đã lưu giao dịch thành công! Biểu đồ đang được cập nhật.', 'success');
-        // updateAppUI đã được gọi trong saveTransaction, đảm bảo biểu đồ và dashboard cập nhật.
-    });
+document.getElementById('password-settings-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const currentPassword = document.getElementById('current-password').value;
+    const newPassword = document.getElementById('new-password').value;
+    const confirmNewPassword = document.getElementById('confirm-new-password').value;
     
-    // === LOGIC XỬ LÝ MODAL XÁC NHẬN VƯỢT MỨC ===
-    limitOverrideForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const overridePassword = document.getElementById('override-password').value;
-        const overrideReason = document.getElementById('override-reason').value.trim();
+    const user = getCurrentUser();
 
-        if (overridePassword !== currentUser.password) {
-            showMessage('Mật khẩu xác nhận không đúng. Giao dịch bị hủy.', 'error');
-            return;
-        }
-
-        saveTransaction(transactionPending, overrideReason);
-        
-        transactionPending = null; 
-        limitOverrideForm.reset();
-        limitOverrideModal.style.display = 'none';
-        
-        transactionForm.reset();
-        document.getElementById('date-input').value = getCurrentDate();
-        showMessage('Đã lưu giao dịch vượt mức thành công! Biểu đồ đang được cập nhật.', 'success');
-    });
-
-    document.querySelector('[data-modal-cancel="limit-override-modal"]').addEventListener('click', () => {
-        transactionPending = null; 
-        limitOverrideForm.reset();
-        limitOverrideModal.style.display = 'none';
-    });
-
-    document.querySelector('[data-modal-close="limit-override-modal"]').addEventListener('click', () => {
-        transactionPending = null; 
-        limitOverrideForm.reset();
-        limitOverrideModal.style.display = 'none';
-    });
-    
-    // 9. Gán Listener cho THIẾT LẬP MỤC TIÊU TIẾT KIỆM
-    savingsForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const name = document.getElementById('savings-name').value.trim();
-        const goal = parseInt(document.getElementById('savings-goal-input').value);
-        const password = document.getElementById('savings-password').value;
-        
-        if(goal <= 0) {
-            showMessage('Mục tiêu phải lớn hơn 0.', 'error');
-            return;
-        }
-        if (password.length < 4) {
-             showMessage('Mật khẩu quỹ phải có ít nhất 4 ký tự.', 'error');
-             return;
-        }
-
-        currentUser.savings.goal = goal;
-        currentUser.savings.password = password;
-        currentUser.savings.name = name;
-        
-        saveAppData();
-        updateSavingsUI();
-        showMessage('Mục tiêu tiết kiệm đã được thiết lập!', 'success');
-    });
-
-    // 10. Gán Listener cho CHUYỂN TIỀN VÀO QUỸ
-    savingsTransferForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const transferAmount = parseInt(document.getElementById('transfer-amount').value);
-        const transferPassword = document.getElementById('transfer-password').value;
-        
-        const savings = currentUser.savings;
-        const balance = calculateBalance(currentUser.transactions, currentUser.profile.initialBalance);
-
-        if (savings.password === '') {
-             showMessage('Vui lòng thiết lập Mục tiêu và Mật khẩu Quỹ trước khi chuyển tiền.', 'error');
-             return;
-        }
-
-        if (transferPassword !== savings.password) {
-            showMessage('Mật khẩu Quỹ không đúng.', 'error');
-            return;
-        }
-        
-        if (savings.goal <= 0) {
-            showMessage('Vui lòng thiết lập mục tiêu tiết kiệm trước.', 'error');
-            return;
-        }
-
-        if (transferAmount > balance) {
-            showMessage('Số dư hiện tại không đủ để chuyển tiền.', 'error');
-            return;
-        }
-        
-        const effectiveTransferAmount = Math.min(transferAmount, savings.goal - savings.currentAmount);
-
-        if (effectiveTransferAmount <= 0) {
-             showMessage('Số tiền đã đạt hoặc vượt quá mục tiêu. Vui lòng thiết lập mục tiêu mới.', 'info');
-             return;
-        }
-
-        currentUser.transactions.push({
-            id: Date.now().toString(),
-            amount: effectiveTransferAmount,
-            type: 'expense',
-            category: 'tiet-kiem',
-            date: getCurrentDate(),
-            note: `Chuyển vào Quỹ Tiết kiệm: ${savings.name}`
-        });
-
-        savings.currentAmount += effectiveTransferAmount;
-        
-        const wasCompleted = checkSavingsCompletion();
-        
-        saveAppData(); 
-        
-        updateAppUI('dashboard-tab');
-        updateAppUI('savings-tab');
-        savingsTransferForm.reset();
-        
-        if (!wasCompleted) {
-            showMessage('Chuyển tiền vào Quỹ thành công!', 'success');
-        } 
-    });
-    
-    // 11. Gán Listener cho RÚT TIỀN TIẾT KIỆM
-    savingsWithdrawForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const withdrawAmount = parseInt(document.getElementById('withdraw-amount').value);
-        const withdrawPassword = document.getElementById('withdraw-password').value;
-        
-        if(withdrawSavings(withdrawAmount, withdrawPassword)) {
-             savingsWithdrawForm.reset();
-             document.getElementById('savings-withdraw-form-container').style.display = 'none';
-             document.getElementById('show-withdraw-form-btn').textContent = 'Rút Tiền Tiết Kiệm';
-        }
-    });
-    
-    // 12. Gán listener cho nút mở form Rút tiền
-    document.getElementById('show-withdraw-form-btn').addEventListener('click', () => {
-         const form = document.getElementById('savings-withdraw-form-container');
-         const btn = document.getElementById('show-withdraw-form-btn');
-
-         form.style.display = form.style.display === 'none' ? 'block' : 'none';
-         btn.textContent = form.style.display === 'none' ? 'Rút Tiền Tiết Kiệm' : 'Ẩn Form Rút Tiền';
-    });
-    
-    // 13. Gán Listener cho NÚT THÊM SỐ DƯ
-    showAddBalanceFormBtn.addEventListener('click', () => {
-        // Chuyển sang tab Thêm giao dịch
-        document.querySelector('.bottom-nav .nav-item[data-target="add-transaction-tab"]').click();
-        
-        // Chọn loại giao dịch là Thu nhập
-        const typeSelect = document.getElementById('type-select');
-        typeSelect.value = 'income';
-        
-        document.getElementById('amount-input').focus();
-        
-        showMessage('Vui lòng nhập số tiền bạn muốn thêm vào tài khoản chính.', 'info');
-    });
-
-    // 14. Xử lý chuyển đổi giữa các tab Cài đặt
-    document.querySelectorAll('.sub-menu-settings .sub-menu-item').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.sub-menu-settings .sub-menu-item').forEach(i => i.classList.remove('active'));
-            btn.classList.add('active');
-            
-            document.querySelectorAll('.settings-content').forEach(content => {
-                content.style.display = 'none';
-            });
-            document.getElementById(btn.dataset.targetSetting).style.display = 'block';
-            updateSettingsUI(); 
-        });
-    });
-    
-    // 15. Form Cập nhật hồ sơ Cài đặt
-    document.getElementById('profile-settings-form').addEventListener('submit', (e) => {
-        e.preventDefault();
-        const newMonthlyIncome = parseInt(document.getElementById('set-monthly-income').value);
-        const newDailyLimit = parseInt(document.getElementById('set-daily-limit').value);
-
-        currentUser.profile.monthlyIncome = newMonthlyIncome;
-        currentUser.profile.dailyLimit = newDailyLimit;
-
-        saveAppData();
-        updateAppUI('dashboard-tab'); 
-        updateSettingsUI();
-        showMessage('Cài đặt hồ sơ chi tiêu đã được cập nhật!', 'success');
-    });
-    
-    // 16. Form Đổi mật khẩu
-    document.getElementById('password-settings-form').addEventListener('submit', (e) => {
-        e.preventDefault();
-        const currentPass = document.getElementById('current-password').value;
-        const newPass = document.getElementById('new-password').value;
-        const confirmNewPass = document.getElementById('confirm-new-password').value;
-
-        if (currentPass !== currentUser.password) {
-            showMessage('Mật khẩu hiện tại không đúng.', 'error');
-            return;
-        }
-
-        if (newPass.length < 6) {
-             showMessage('Mật khẩu mới phải ít nhất 6 ký tự.', 'error');
-             return;
-        }
-
-        if (newPass !== confirmNewPass) {
-            showMessage('Mật khẩu mới và xác nhận mật khẩu không khớp.', 'error');
-            return;
-        }
-
-        currentUser.password = newPass;
-        saveAppData();
-        document.getElementById('password-settings-form').reset();
-        showMessage('Mật khẩu đã được thay đổi thành công!', 'success');
-    });
-
-    // --- KIỂM TRA TRẠNG THÁI ĐĂNG NHẬP VÀ HIỂN THỊ MÀN HÌNH ---
-    if (currentUser) {
-        authScreen.classList.remove('active');
-        mainApp.classList.add('active');
-        // Kích hoạt nút Dashboard để hiển thị giao diện và tải dữ liệu ban đầu
-        document.querySelector('.bottom-nav .nav-item[data-target="dashboard-tab"]').click();
-    } else {
-        authScreen.classList.add('active');
-        profileSetupScreen.classList.remove('active');
-        mainApp.classList.remove('active');
+    if (user.password !== currentPassword) {
+        showGlobalMessage('Mật khẩu hiện tại không đúng.', 'error');
+        return;
     }
 
-}
+    if (newPassword.length < 6) {
+        showGlobalMessage('Mật khẩu mới phải có ít nhất 6 ký tự.', 'error');
+        return;
+    }
 
-// Chạy khởi tạo ứng dụng
-initApp();
+    if (newPassword !== confirmNewPassword) {
+        showGlobalMessage('Mật khẩu mới và xác nhận không khớp.', 'error');
+        return;
+    }
+
+    user.password = newPassword;
+    updateCurrentUser(user);
+    showGlobalMessage('Mật khẩu đã được thay đổi thành công!', 'success');
+    document.getElementById('password-settings-form').reset();
+});
+
+// =================================================================
+// CÁC SỰ KIỆN KHỞI TẠO
+// =================================================================
+
+// Lắng nghe sự kiện chuyển tab
+navItems.forEach(item => {
+    item.addEventListener('click', (e) => {
+        const targetId = e.currentTarget.getAttribute('data-target');
+        switchTab(targetId);
+    });
+});
+
+
+// TẢI DỮ LIỆU VÀ KHỞI TẠO APP
+loadAppData();
+window.addEventListener('load', () => {
+    checkLoginState();
+    
+    // Đặt ngày hiện tại cho form giao dịch
+    document.getElementById('date-input').value = getCurrentDate(); 
+});
